@@ -915,13 +915,13 @@ class SizeofTest(unittest.TestCase):
         # code
         def check_code_size(a, expected_size):
             self.assertGreaterEqual(sys.getsizeof(a), expected_size)
-        check_code_size(get_cell().__code__, size('6i13P'))
-        check_code_size(get_cell.__code__, size('6i13P'))
+        check_code_size(get_cell().__code__, size('6i13P2n1P'))
+        check_code_size(get_cell.__code__, size('6i13P2n1P'))
         def get_cell2(x):
             def inner():
                 return x
             return inner
-        check_code_size(get_cell2.__code__, size('6i13P') + calcsize('n'))
+        check_code_size(get_cell2.__code__, size('6i13P2n1P') + calcsize('n'))
         # complex
         check(complex(0,1), size('2d'))
         # method_descriptor (descriptor object)

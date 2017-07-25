@@ -17,6 +17,20 @@ typedef uint16_t _Py_CODEUNIT;
 #  define _Py_OPARG(word) ((word) >> 8)
 #endif
 
+/* Each code object has a cache for the result of executing certain bytecodes.
+   The cache is an array of the same length as co_code; for a given opcode, the
+   cached result lives at the same array index in the cache. This makes cache
+   lookups cheap at the expense of wasting 8 bytes for opcodes that cannot be
+   cached.
+
+   The cache is lazily initialized in _PyEval_EvalFrameDefault after the code
+   object has been deemed hot enough.
+*/
+typedef struct {
+    Py_ssize_t nentries;
+    void **entries;
+} PyCode_Cache;
+
 /* Bytecode object */
 typedef struct {
     PyObject_HEAD
@@ -48,6 +62,8 @@ typedef struct {
        Type is a void* to keep the format private in codeobject.c to force
        people to go through the proper APIs. */
     void *co_extra;
+    int co_ncalls;                 /* incremented for each execution */
+    PyCode_Cache co_cache;      /* cache of opcode results */
 } PyCodeObject;
 
 /* Masks for co_flags above */
@@ -148,6 +164,12 @@ PyAPI_FUNC(int) _PyCode_GetExtra(PyObject *code, Py_ssize_t index,
                                  void **extra);
 PyAPI_FUNC(int) _PyCode_SetExtra(PyObject *code, Py_ssize_t index,
                                  void *extra);
+#endif
+
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(int) _PyCode_InitCache(PyCodeObject *co);
+PyAPI_FUNC(void) _PyCode_Cache_Set(PyCodeObject *co, int offset, void *entry);
+PyAPI_FUNC(void*) _PyCode_Cache_Get(PyCodeObject *co, int offset);
 #endif
 
 #ifdef __cplusplus

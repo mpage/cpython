@@ -1349,6 +1349,25 @@ PyDoc_STRVAR(is_finalizing_doc,
 "is_finalizing()\n\
 Return True if Python is exiting.");
 
+PyDoc_STRVAR(inline_cache_stats_doc,
+"inline_cache_stats() -> tuple of stats\n\
+\n\
+Return a tuple of inline cache statistics, if INLINE_CACHE_PROFILE was defined\n\
+when Python was built.  Otherwise, return None.\n\
+\n\
+When enabled, this function returns implementation-specific\n\
+details about the state of inline caches in the interpreter.\n\
+The return value is a 3-tuple where the entries in the tuple are:\n\
+0. The number of inline caches that have been allocated\n\
+1. The total amount of memory allocated to inline caches\n\
+2. A dictionary keyed by opcode name (e.g. LOAD_ATTR) that contains\n\
+   per opcode statistics. Values are dictionaries with the following\n\
+   keys:\n\
+   - 'hits'        - The number of cache hits.\n\
+   - 'misses'      - The number of cache misses.\n\
+   - 'uncacheable' - The number of uncacheable call sites.\n\
+   - 'entries'     - The total number of cache entries.\n\
+");
 
 static PyMethodDef sys_methods[] = {
     /* Might as well keep this in alphabetic order */
@@ -1398,6 +1417,8 @@ static PyMethodDef sys_methods[] = {
     {"_enablelegacywindowsfsencoding", (PyCFunction)sys_enablelegacywindowsfsencoding,
      METH_NOARGS, enablelegacywindowsfsencoding_doc },
 #endif /* MS_WINDOWS */
+    {"inline_cache_stats", (PyCFunction)PyEval_GetInlineCacheStats, METH_NOARGS,
+     inline_cache_stats_doc},
     {"intern",          sys_intern,     METH_VARARGS, intern_doc},
     {"is_finalizing",   sys_is_finalizing, METH_NOARGS, is_finalizing_doc},
 #ifdef USE_MALLOPT

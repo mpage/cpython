@@ -100,6 +100,24 @@ intern_string_constants(PyObject *tuple)
     return modified;
 }
 
+static void
+_PyCode_ClearCache(PyCodeObject *co)
+{
+    Py_ssize_t i = 0;
+
+    if (co->co_cache.entries == NULL) {
+        return;
+    }
+
+    for (i = 0; i < co->co_cache.nentries; i++) {
+        if (co->co_cache.entries[i] != NULL) {
+            PyMem_Free(co->co_cache.entries[i]);
+        }
+    }
+    PyMem_Free(co->co_cache.entries);
+    co->co_cache.entries = NULL;
+    co->co_cache.nentries = 0;
+}
 
 PyCodeObject *
 PyCode_New(int argcount, int kwonlyargcount,
@@ -201,6 +219,9 @@ PyCode_New(int argcount, int kwonlyargcount,
     co->co_zombieframe = NULL;
     co->co_weakreflist = NULL;
     co->co_extra = NULL;
+    co->co_ncalls = 0;
+    memset(&(co->co_cache), 0, sizeof(PyCode_Cache));
+
     return co;
 }
 
@@ -425,6 +446,7 @@ code_dealloc(PyCodeObject *co)
         PyMem_Free(co_extra->ce_extras);
         PyMem_Free(co_extra);
     }
+    _PyCode_ClearCache(co);
 
     Py_XDECREF(co->co_code);
     Py_XDECREF(co->co_consts);
@@ -907,4 +929,45 @@ _PyCode_SetExtra(PyObject *code, Py_ssize_t index, void *extra)
 
     co_extra->ce_extras[index] = extra;
     return 0;
+}
+
+int
+_PyCode_InitCache(PyCodeObject *co)
+{
+    Py_ssize_t nopcodes = 0;
+    Py_buffer opbuf;
+
+    if (PyObject_GetBuffer(co->co_code, &opbuf, PyBUF_SIMPLE) == -1) {
+        return -1;
+    }
+    nopcodes = opbuf.len / sizeof(_Py_CODEUNIT);
+    PyBuffer_Release(&opbuf);
+
+    co->co_cache.entries = PyMem_Malloc(sizeof(void *) * nopcodes);
+    if (co->co_cache.entries == NULL) {
+        return -1;
+    }
+    memset(co->co_cache.entries, 0, sizeof(void *) * nopcodes);
+    co->co_cache.nentries = nopcodes;
+    return 0;
+}
+
+inline void
+_PyCode_Cache_Set(PyCodeObject *co, int offset, void *entry)
+{
+    if (co->co_cache.entries == NULL) {
+        return;
+    }
+    assert(offset > -1 && offset < co->co_cache.nentries);
+    co->co_cache.entries[offset] = entry;
+}
+
+inline void*
+_PyCode_Cache_Get(PyCodeObject *co, int offset)
+{
+    if (co->co_cache.entries == NULL) {
+        return NULL;
+    }
+    assert(offset > -1 && offset < co->co_cache.nentries);
+    return co->co_cache.entries[offset];
 }

@@ -67,6 +67,152 @@ static PyObject * special_lookup(PyObject *, _Py_Identifier *);
 static int check_args_iterable(PyObject *func, PyObject *vararg);
 static void format_kwargs_mapping_error(PyObject *func, PyObject *kwargs);
 
+/* Cache entry for the result of LOAD_GLOBAL */
+typedef struct {
+    uint64_t globals_version;
+    uint64_t builtins_version;
+    PyObject *value; /* borrowed */
+} GlobalCacheEntry;
+
+static GlobalCacheEntry *GlobalCacheEntry_New(uint64_t gv, uint64_t bv, PyObject *value);
+static int GlobalCacheEntry_IsValid(GlobalCacheEntry *entry, uint64_t gv, uint64_t bv);
+
+/* Cache entry for the result of LOAD_ATTR */
+typedef struct {
+    unsigned int tp_version_tag;
+    int uncacheable;
+    PyObject *value; /* borrowed */
+} AttrCacheEntry;
+
+static PyObject *GetAttrWithCache(PyObject *owner, PyObject *name, PyCodeObject *co,
+                                  int idx);
+
+/* Statistics about caches for a particular opcode */
+typedef struct {
+    Py_ssize_t hits;
+    Py_ssize_t misses;
+    Py_ssize_t uncacheable;
+    Py_ssize_t entries;
+} OpcodeCacheStats;
+
+
+#ifdef INLINE_CACHE_PROFILE
+
+/* Indexed by opcode */
+static OpcodeCacheStats opcode_cache_stats[255];
+
+/* Number of inline caches that have been allocated */
+Py_ssize_t inline_cache_count = 0;
+
+/* Total number of bytes allocated to inline caches */
+Py_ssize_t inline_cache_total_size = 0;
+
+#define INLINE_CACHE_CREATED(cache) \
+    do {  \
+        inline_cache_count++;  \
+        inline_cache_total_size += (cache).nentries * sizeof(void *);   \
+    } while (0)
+
+#define INLINE_CACHE_ENTRY_CREATED(opcode, entry) \
+    do {  \
+        inline_cache_total_size += sizeof(entry);     \
+        opcode_cache_stats[(opcode)].entries++;         \
+    } while (0)
+
+#define INLINE_CACHE_RECORD_STAT(opcode, stat_name) (opcode_cache_stats[(opcode)].stat_name++)
+
+static int
+_PyEval_AddOpcodeCacheStat(PyObject *container, const char *key, Py_ssize_t stat)
+{
+    PyObject *v = PyLong_FromSsize_t(stat);
+    if (v == NULL) {
+        return -1;
+    }
+
+    int st = PyDict_SetItemString(container, key, v);
+    /* Ownership transferred to container on success, freed on failure. */
+    Py_DECREF(v);
+
+    return st;
+}
+
+static int
+_PyEval_AddOpcodeCacheStatsDict(PyObject *container, const char *key, OpcodeCacheStats *stats)
+{
+    PyObject *dct = PyDict_New();
+    if (dct == NULL) {
+        return -1;
+    }
+
+#define ADD_STAT(expr, key)  \
+    do {  \
+        if (_PyEval_AddOpcodeCacheStat(dct, (key), (expr)) == -1) {  \
+            Py_DECREF(dct);  \
+            return NULL;  \
+        }  \
+    } while (0)
+
+    ADD_STAT(stats->hits, "hits");
+    ADD_STAT(stats->misses, "misses");
+    ADD_STAT(stats->uncacheable, "uncacheable");
+    ADD_STAT(stats->entries, "entries");
+
+#undef ADD_STAT
+
+    int st = PyDict_SetItemString(container, key, dct);
+    /* Ownership transferred to container on success, freed on failure. */
+    Py_DECREF(dct);
+    return st;
+}
+
+PyObject *
+PyEval_GetInlineCacheStats(PyObject *self)
+{
+    PyObject *opcode_stats = PyDict_New();
+    if (opcode_stats == NULL) {
+        return NULL;
+    }
+
+    int st = _PyEval_AddOpcodeCacheStatsDict(opcode_stats, "LOAD_GLOBAL",
+                                             &opcode_cache_stats[LOAD_GLOBAL]);
+    if (st == -1) {
+        goto err;
+    }
+    st = _PyEval_AddOpcodeCacheStatsDict(opcode_stats, "LOAD_ATTR",
+                                         &opcode_cache_stats[LOAD_ATTR]);
+    if (st == -1) {
+        goto err;
+    }
+
+    PyObject *ret = Py_BuildValue("nnN", inline_cache_count,
+                                  inline_cache_total_size, opcode_stats);
+    if (ret == NULL) {
+        goto err;
+    }
+
+    /* Ownership transferred to caller */
+    return ret;
+
+  err:
+    Py_DECREF(opcode_stats);
+    return NULL;
+}
+
+#else
+
+#define INLINE_CACHE_CREATED(cache)
+#define INLINE_CACHE_ENTRY_CREATED(opcode, entry)
+#define INLINE_CACHE_RECORD_STAT(opcode, stat_name)
+
+PyObject *
+PyEval_GetInlineCacheStats(PyObject *self)
+{
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+#endif
+
 #define NAME_ERROR_MSG \
     "name '%.200s' is not defined"
 #define UNBOUNDLOCAL_ERROR_MSG \
@@ -901,6 +1047,8 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
 
 /* The integer overflow is checked by an assertion below. */
 #define INSTR_OFFSET()  (sizeof(_Py_CODEUNIT) * (int)(next_instr - first_instr))
+#define CODE_CACHE_INDEX() ((int)(next_instr - first_instr) - 1)
+#define CODE_CACHE_INIT_THRESHOLD 50
 #define NEXTOPARG()  do { \
         _Py_CODEUNIT word = *next_instr; \
         opcode = _Py_OPCODE(word); \
@@ -1139,6 +1287,17 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
        caller loses its exception */
     assert(!PyErr_Occurred());
 #endif
+
+    /* Initialize the inline cache after the code object is "hot enough" */
+    if (co->co_cache.entries == NULL) {
+        co->co_ncalls++;
+        if (co->co_ncalls > CODE_CACHE_INIT_THRESHOLD) {
+            if (_PyCode_InitCache(co) == -1) {
+                goto error;
+            }
+            INLINE_CACHE_CREATED(co->co_cache);
+        }
+    }
 
     for (;;) {
         assert(stack_pointer >= f->f_valuestack); /* else underflow */
@@ -2394,20 +2553,42 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
         TARGET(LOAD_GLOBAL) {
             PyObject *name = GETITEM(names, oparg);
             PyObject *v;
+
             if (PyDict_CheckExact(f->f_globals)
                 && PyDict_CheckExact(f->f_builtins))
             {
-                v = _PyDict_LoadGlobal((PyDictObject *)f->f_globals,
-                                       (PyDictObject *)f->f_builtins,
-                                       name);
-                if (v == NULL) {
-                    if (!_PyErr_OCCURRED()) {
-                        /* _PyDict_LoadGlobal() returns NULL without raising
-                         * an exception if the key doesn't exist */
-                        format_exc_check_arg(PyExc_NameError,
-                                             NAME_ERROR_MSG, name);
+                uint64_t gv = ((PyDictObject *) f->f_globals)->ma_version_tag;
+                uint64_t bv = ((PyDictObject *) f->f_builtins)->ma_version_tag;
+                GlobalCacheEntry *entry = (GlobalCacheEntry *) _PyCode_Cache_Get(
+                    co, CODE_CACHE_INDEX());
+                if (GlobalCacheEntry_IsValid(entry, gv, bv)) {
+                    INLINE_CACHE_RECORD_STAT(LOAD_GLOBAL, hits);
+                    v = entry->value;
+                } else {
+                    v = _PyDict_LoadGlobal((PyDictObject *)f->f_globals,
+                                           (PyDictObject *)f->f_builtins,
+                                           name);
+                    if (v == NULL) {
+                        if (!_PyErr_OCCURRED()) {
+                            /* _PyDict_LoadGlobal() returns NULL without raising
+                             * an exception if the key doesn't exist */
+                            format_exc_check_arg(PyExc_NameError,
+                                                 NAME_ERROR_MSG, name);
+                        }
+                        goto error;
                     }
-                    goto error;
+                    if (entry != NULL) {
+                        INLINE_CACHE_RECORD_STAT(LOAD_GLOBAL, misses);
+                        entry->value = v;
+                        entry->globals_version = gv;
+                        entry->builtins_version = bv;
+                    } else if (co->co_cache.entries != NULL) {
+                        entry = GlobalCacheEntry_New(gv, bv, v);
+                        if (entry == NULL) {
+                            goto error;
+                        }
+                        _PyCode_Cache_Set(co, CODE_CACHE_INDEX(), entry);
+                    }
                 }
                 Py_INCREF(v);
             }
@@ -2854,7 +3035,7 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
         TARGET(LOAD_ATTR) {
             PyObject *name = GETITEM(names, oparg);
             PyObject *owner = TOP();
-            PyObject *res = PyObject_GetAttr(owner, name);
+            PyObject *res = GetAttrWithCache(owner, name, co, CODE_CACHE_INDEX());
             Py_DECREF(owner);
             SET_TOP(res);
             if (res == NULL)
@@ -5562,4 +5743,165 @@ maybe_dtrace_line(PyFrameObject *frame,
         PyDTrace_LINE(co_filename, co_name, line);
     }
     *instr_prev = frame->f_lasti;
+}
+
+static inline GlobalCacheEntry *
+GlobalCacheEntry_New(uint64_t gv, uint64_t bv, PyObject *value)
+{
+    GlobalCacheEntry *entry = PyMem_Malloc(sizeof(GlobalCacheEntry));
+    if (entry == NULL) {
+        return NULL;
+    }
+
+    INLINE_CACHE_ENTRY_CREATED(LOAD_GLOBAL, GlobalCacheEntry);
+    entry->globals_version = gv;
+    entry->builtins_version = bv;
+    entry->value = value;
+
+    return entry;
+}
+
+static inline int
+GlobalCacheEntry_IsValid(GlobalCacheEntry *entry, uint64_t gv, uint64_t bv)
+{
+    return (entry != NULL) &&
+           (entry->globals_version == gv) &&
+           (entry->builtins_version == bv);
+}
+
+static inline void
+AttrCacheEntry_Update(AttrCacheEntry *entry, PyObject *obj, PyObject *value)
+{
+    PyTypeObject *tp = Py_TYPE(obj);
+    entry->tp_version_tag = tp->tp_version_tag;
+    entry->uncacheable = 0;
+    entry->value = value;
+}
+
+static PyObject *
+GetAttrAndUpdateCacheEntry(PyObject *obj, PyObject *name, AttrCacheEntry *entry)
+{
+    PyTypeObject *tp = Py_TYPE(obj);
+    PyObject *dict = NULL;
+    PyObject *descr = NULL;
+    PyObject *res = NULL;
+    descrgetfunc f;
+    Py_ssize_t dictoffset;
+    PyObject **dictptr;
+
+    if (entry->uncacheable) {
+        return PyObject_GetAttr(obj, name);
+    } else if (PyType_HasFeature(tp, Py_TPFLAGS_VALID_VERSION_TAG) &&
+               (tp->tp_version_tag == entry->tp_version_tag)) {
+        /* Cache hit */
+        INLINE_CACHE_RECORD_STAT(LOAD_ATTR, hits);
+        descr = entry->value;
+        Py_INCREF(name);
+    } else {
+        /* Cache miss, need to perform MRO walk */
+        if (tp->tp_getattro != PyObject_GenericGetAttr) {
+            /* Obj's type doesn't use PyObject_GenericGetAttr. Mark this call site
+               as uncacheable.
+            */
+            entry->uncacheable = 1;
+            INLINE_CACHE_RECORD_STAT(LOAD_ATTR, uncacheable);
+            return PyObject_GetAttr(obj, name);
+        }
+        if (!PyUnicode_Check(name)){
+            PyErr_Format(PyExc_TypeError,
+                         "attribute name must be string, not '%.200s'",
+                         name->ob_type->tp_name);
+            return NULL;
+        }
+        Py_INCREF(name);
+        if (tp->tp_dict == NULL) {
+            if (PyType_Ready(tp) < 0)
+                goto done;
+        }
+        descr = _PyType_Lookup(tp, name);
+        INLINE_CACHE_RECORD_STAT(LOAD_ATTR, misses);
+        AttrCacheEntry_Update(entry, obj, descr);
+    }
+
+    f = NULL;
+    if (descr != NULL) {
+        Py_INCREF(descr);
+        f = descr->ob_type->tp_descr_get;
+        if (f != NULL && PyDescr_IsData(descr)) {
+            res = f(descr, obj, (PyObject *)obj->ob_type);
+            goto done;
+        }
+    }
+
+    /* Inline _PyObject_GetDictPtr */
+    dictoffset = tp->tp_dictoffset;
+    if (dictoffset != 0) {
+        if (dictoffset < 0) {
+            Py_ssize_t tsize;
+            size_t size;
+
+            tsize = ((PyVarObject *)obj)->ob_size;
+            if (tsize < 0)
+                tsize = -tsize;
+            size = _PyObject_VAR_SIZE(tp, tsize);
+            assert(size <= PY_SSIZE_T_MAX);
+
+            dictoffset += (Py_ssize_t)size;
+            assert(dictoffset > 0);
+            assert(dictoffset % SIZEOF_VOID_P == 0);
+        }
+        dictptr = (PyObject **) ((char *)obj + dictoffset);
+        dict = *dictptr;
+    }
+    if (dict != NULL) {
+        Py_INCREF(dict);
+        /* TODO - If we cache the offset into the dictionary we can potentially elide this */
+        res = PyDict_GetItem(dict, name);
+        if (res != NULL) {
+            Py_INCREF(res);
+            Py_DECREF(dict);
+            goto done;
+        }
+        Py_DECREF(dict);
+    }
+
+    if (f != NULL) {
+        res = f(descr, obj, (PyObject *)Py_TYPE(obj));
+        goto done;
+    }
+
+    if (descr != NULL) {
+        res = descr;
+        descr = NULL;
+        goto done;
+    }
+
+    PyErr_Format(PyExc_AttributeError,
+                 "'%.50s' object has no attribute '%U'",
+                 tp->tp_name, name);
+  done:
+    Py_XDECREF(descr);
+    Py_DECREF(name);
+    return res;
+}
+
+static PyObject *
+GetAttrWithCache(PyObject *owner, PyObject *name, PyCodeObject *co, int idx)
+{
+    if (co->co_cache.entries == NULL) {
+        return PyObject_GetAttr(owner, name);
+    }
+
+    AttrCacheEntry *entry = (AttrCacheEntry *) _PyCode_Cache_Get(co, idx);
+    if (entry == NULL) {
+        entry = PyMem_Malloc(sizeof(AttrCacheEntry));
+        if (entry == NULL) {
+            return NULL;
+        }
+        INLINE_CACHE_ENTRY_CREATED(LOAD_ATTR, AttrCacheEntry);
+        memset(entry, 0, sizeof(AttrCacheEntry));
+        _PyCode_Cache_Set(co, idx, entry);
+    }
+
+    return GetAttrAndUpdateCacheEntry(owner, name, entry);
 }
