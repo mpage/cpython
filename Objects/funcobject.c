@@ -7,6 +7,29 @@
 #include "pycore_pyerrors.h"      // _PyErr_Occurred()
 #include "structmember.h"         // PyMemberDef
 
+static PyFunction_EventCallback func_event_callback = NULL;
+
+static void
+handle_func_event(PyFunction_Event event, PyFunctionObject *func, PyObject *new_value)
+{
+    if (func_event_callback == NULL) {
+        return;
+    }
+    func_event_callback(event, func, new_value);
+}
+
+void
+PyFunction_SetEventCallback(PyFunction_EventCallback callback)
+{
+    func_event_callback = callback;
+}
+
+PyFunction_EventCallback
+PyFunction_GetEventCallback()
+{
+    return func_event_callback;
+}
+
 PyObject *
 PyFunction_NewWithQualName(PyObject *code, PyObject *globals, PyObject *qualname)
 {
@@ -79,6 +102,7 @@ PyFunction_NewWithQualName(PyObject *code, PyObject *globals, PyObject *qualname
     op->vectorcall = _PyFunction_Vectorcall;
 
     _PyObject_GC_TRACK(op);
+    handle_func_event(PYFUNC_EVENT_CREATED, op, NULL);
     return (PyObject *)op;
 
 error:
@@ -336,6 +360,7 @@ func_set_code(PyFunctionObject *op, PyObject *value, void *Py_UNUSED(ignored))
                      nclosure, nfree);
         return -1;
     }
+    handle_func_event(PYFUNC_EVENT_MODIFY_CODE, op, value);
     Py_INCREF(value);
     Py_XSETREF(op->func_code, value);
     return 0;
@@ -420,6 +445,7 @@ func_set_defaults(PyFunctionObject *op, PyObject *value, void *Py_UNUSED(ignored
         return -1;
     }
 
+    handle_func_event(PYFUNC_EVENT_MODIFY_DEFAULTS, op, value);
     Py_XINCREF(value);
     Py_XSETREF(op->func_defaults, value);
     return 0;
@@ -461,6 +487,7 @@ func_set_kwdefaults(PyFunctionObject *op, PyObject *value, void *Py_UNUSED(ignor
         return -1;
     }
 
+    handle_func_event(PYFUNC_EVENT_MODIFY_KWDEFAULTS, op, value);
     Py_XINCREF(value);
     Py_XSETREF(op->func_kwdefaults, value);
     return 0;
@@ -638,6 +665,7 @@ func_clear(PyFunctionObject *op)
 static void
 func_dealloc(PyFunctionObject *op)
 {
+    handle_func_event(PYFUNC_EVENT_DESTROY, op, NULL);
     _PyObject_GC_UNTRACK(op);
     if (op->func_weakreflist != NULL) {
         PyObject_ClearWeakRefs((PyObject *) op);

@@ -20,6 +20,7 @@
 #include "Python.h"
 #include "datetime.h"
 #include "marshal.h"
+#include "_testcapi/parts.h"
 #include "structmember.h"         // PyMemberDef
 #include <float.h>
 #include <signal.h>
@@ -7330,8 +7331,9 @@ PyInit__testcapi(void)
     if (HeapCTypeSubclass == NULL) {
         return NULL;
     }
-    Py_DECREF(subclass_bases);
-    PyModule_AddObject(m, "HeapCTypeSubclass", HeapCTypeSubclass);
+    if (_PyTestCapi_Init_FuncEvents(m) < 0) {
+        return NULL;
+    }
 
     PyObject *HeapCTypeWithDict = PyType_FromSpec(&HeapCTypeWithDict_spec);
     if (HeapCTypeWithDict == NULL) {

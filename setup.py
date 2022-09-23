@@ -1040,7 +1040,7 @@ class PyBuildExt(build_ext):
 
     def detect_test_extensions(self):
         # Python C API test module
-        self.add(Extension('_testcapi', ['_testcapimodule.c'],
+        self.add(Extension('_testcapi', ['_testcapimodule.c', '_testcapi/func_events.c'],
                            depends=['testcapi_long.h']))
 
         # Python Internal C API test module
