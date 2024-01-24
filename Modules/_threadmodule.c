@@ -4,6 +4,7 @@
 
 #include "Python.h"
 #include "pycore_interp.h"        // _PyInterpreterState.threads.count
+#include "pycore_lock.h"          // PyMutex
 #include "pycore_moduleobject.h"  // _PyModule_GetState()
 #include "pycore_pylifecycle.h"
 #include "pycore_pystate.h"       // _PyThreadState_SetCurrent()
@@ -183,9 +184,8 @@ static PyType_Spec ThreadHandle_Type_spec = {
 
 typedef struct {
     PyObject_HEAD
-    PyThread_type_lock lock_lock;
+    PyMutex mutex;
     PyObject *in_weakreflist;
-    char locked; /* for sanity checking */
 } lockobject;
 
 static int
@@ -201,12 +201,6 @@ lock_dealloc(lockobject *self)
     PyObject_GC_UnTrack(self);
     if (self->in_weakreflist != NULL) {
         PyObject_ClearWeakRefs((PyObject *) self);
-    }
-    if (self->lock_lock != NULL) {
-        /* Unlock the lock so it's safe to free it */
-        if (self->locked)
-            PyThread_release_lock(self->lock_lock);
-        PyThread_free_lock(self->lock_lock);
     }
     PyTypeObject *tp = Py_TYPE(self);
     tp->tp_free((PyObject*)self);
@@ -272,14 +266,22 @@ lock_PyThread_acquire_lock(lockobject *self, PyObject *args, PyObject *kwds)
     if (lock_acquire_parse_args(args, kwds, &timeout) < 0)
         return NULL;
 
-    PyLockStatus r = acquire_timed(self->lock_lock, timeout);
-    if (r == PY_LOCK_INTR) {
-        return NULL;
+    PyLockStatus st = _PyMutex_LockTimed(&self->mutex, timeout, _PY_LOCK_DETACH | _PY_LOCK_HANDLE_SIGNALS);
+    switch (st) {
+        case PY_LOCK_ACQUIRED: {
+            assert(PyMutex_IsLocked(&self->mutex));
+            Py_RETURN_TRUE;
+        }
+        case PY_LOCK_FAILURE: {
+            Py_RETURN_FALSE;
+        }
+        case PY_LOCK_INTR: {
+            return NULL;
+        }
+        default: {
+            Py_UNREACHABLE();
+        }
     }
-
-    if (r == PY_LOCK_ACQUIRED)
-        self->locked = 1;
-    return PyBool_FromLong(r == PY_LOCK_ACQUIRED);
 }
 
 PyDoc_STRVAR(acquire_doc,
@@ -297,13 +299,11 @@ static PyObject *
 lock_PyThread_release_lock(lockobject *self, PyObject *Py_UNUSED(ignored))
 {
     /* Sanity check: the lock must be locked */
-    if (!self->locked) {
+    if (_PyMutex_TryUnlock(&self->mutex) < 0) {
         PyErr_SetString(ThreadError, "release unlocked lock");
         return NULL;
     }
 
-    PyThread_release_lock(self->lock_lock);
-    self->locked = 0;
     Py_RETURN_NONE;
 }
 
@@ -318,7 +318,7 @@ but it needn't be locked by the same thread that unlocks it.");
 static PyObject *
 lock_locked_lock(lockobject *self, PyObject *Py_UNUSED(ignored))
 {
-    return PyBool_FromLong((long)self->locked);
+    return PyBool_FromLong(PyMutex_IsLocked(&self->mutex));
 }
 
 PyDoc_STRVAR(locked_doc,
@@ -330,21 +330,16 @@ Return whether the lock is in the locked state.");
 static PyObject *
 lock_repr(lockobject *self)
 {
+    int locked = PyMutex_IsLocked(&self->mutex);
     return PyUnicode_FromFormat("<%s %s object at %p>",
-        self->locked ? "locked" : "unlocked", Py_TYPE(self)->tp_name, self);
+        locked ? "locked" : "unlocked", Py_TYPE(self)->tp_name, self);
 }
 
 #ifdef HAVE_FORK
 static PyObject *
 lock__at_fork_reinit(lockobject *self, PyObject *Py_UNUSED(args))
 {
-    if (_PyThread_at_fork_reinit(&self->lock_lock) < 0) {
-        PyErr_SetString(ThreadError, "failed to reinitialize lock at fork");
-        return NULL;
-    }
-
-    self->locked = 0;
-
+    _PyMutex_at_fork_reinit(&self->mutex);
     Py_RETURN_NONE;
 }
 #endif  /* HAVE_FORK */
@@ -719,15 +714,9 @@ newlockobject(PyObject *module)
         return NULL;
     }
 
-    self->lock_lock = PyThread_allocate_lock();
-    self->locked = 0;
+    self->mutex = (PyMutex){0};
     self->in_weakreflist = NULL;
 
-    if (self->lock_lock == NULL) {
-        Py_DECREF(self);
-        PyErr_SetString(ThreadError, "can't allocate lock");
-        return NULL;
-    }
     return self;
 }
 
@@ -1524,10 +1513,7 @@ release_sentinel(void *weakref_raw)
        execute here. */
     lockobject *lock = (lockobject *)_PyWeakref_GET_REF(weakref);
     if (lock != NULL) {
-        if (lock->locked) {
-            PyThread_release_lock(lock->lock_lock);
-            lock->locked = 0;
-        }
+        _PyMutex_TryUnlock(&lock->mutex);
         Py_DECREF(lock);
     }
 
