@@ -6,6 +6,7 @@ import _thread
 import functools
 import warnings
 
+import time
 from time import monotonic as _time
 from _weakrefset import WeakSet
 from itertools import count as _count
@@ -1112,6 +1113,7 @@ class Thread:
         # module's _shutdown() function.
         lock = self._tstate_lock
         if lock is not None:
+            self._log("Checking _tstate_lock is unlocked")
             assert not lock.locked()
         self._is_stopped = True
         self._tstate_lock = None
@@ -1182,6 +1184,11 @@ class Thread:
                 self._handle = None
                 # No need to keep this around
                 self._join_lock = None
+    def _log(self, msg):
+        cur_thr_name = current_thread()._name
+        if cur_thr_name not in ("join-race-B", "join-race-C"):
+            return
+        print(f"[{current_thread()._name} join {self._name}] - {msg}")
 
     def _wait_for_tstate_lock(self, block=True, timeout=-1):
         # Issue #18808: wait for the thread state to be gone.
@@ -1196,9 +1203,19 @@ class Thread:
             assert self._is_stopped
             return
 
+        cur_thr_name = current_thread()._name
         try:
             if lock.acquire(block, timeout):
+                self._log(f"Acquired _tstate_lock for {self._name}")
+                if cur_thr_name =="join-race-C":
+                    self._log("Sleeping for 2")
+                    time.sleep(2)
+                self._log("Releasing _tstate_lock")
                 lock.release()
+                if cur_thr_name == "join-race-B":
+                    self._log("Sleeping for 0.5")
+                    time.sleep(0.5)
+                self._log("Calling _stop")
                 self._stop()
         except:
             if lock.locked():
