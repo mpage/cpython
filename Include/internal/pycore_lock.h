@@ -135,6 +135,10 @@ typedef struct {
     uint8_t v;
 } PyEvent;
 
+// Check if the event is set without blocking. Returns 1 if the event is set or
+// 0 otherwise.
+PyAPI_FUNC(int) _PyEvent_IsSet(PyEvent *evt);
+
 // Set the event and notify any waiting threads.
 // Export for '_testinternalcapi' shared extension
 PyAPI_FUNC(void) _PyEvent_Notify(PyEvent *evt);
@@ -158,29 +162,9 @@ typedef struct _PyEventRc {
     Py_ssize_t refcount;
 } _PyEventRc;
 
-static inline _PyEventRc *
-_PyEventRc_New(void)
-{
-    _PyEventRc *erc = (_PyEventRc *)PyMem_RawCalloc(1, sizeof(_PyEventRc));
-    if (erc != NULL) {
-        erc->refcount = 1;
-    }
-    return erc;
-}
-
-static inline void
-_PyEventRc_Incref(_PyEventRc *erc)
-{
-    _Py_atomic_add_ssize(&erc->refcount, 1);
-}
-
-static inline void
-_PyEventRc_Decref(_PyEventRc *erc)
-{
-    if (_Py_atomic_add_ssize(&erc->refcount, -1) == 1) {
-        PyMem_RawFree(erc);
-    }
-}
+_PyEventRc *_PyEventRc_New(void);
+void _PyEventRc_Incref(_PyEventRc *erc);
+void _PyEventRc_Decref(_PyEventRc *erc);
 
 // _PyRawMutex implements a word-sized mutex that that does not depend on the
 // parking lot API, and therefore can be used in the parking lot
