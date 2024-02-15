@@ -1603,24 +1603,6 @@ PyThreadState_Clear(PyThreadState *tstate)
 
     Py_CLEAR(tstate->context);
 
-    _PyEventRc *done_event = tstate->done_event;
-    tstate->done_event = NULL;
-
-    // Notify threads waiting on Thread.join(). This should happen after the
-    // thread state is unlinked, but must happen before parking lot is
-    // deinitialized.
-    //
-    // For the "main" thread of each interpreter, this is meant
-    // to be done in _PyInterpreterState_SetNotRunningMain().
-    // That leaves threads created by the threading module,
-    // and any threads killed by forking.
-    // However, we also accommodate "main" threads that still
-    // don't call _PyInterpreterState_SetNotRunningMain() yet.
-    if (done_event) {
-        _PyEvent_Notify(&done_event->event);
-        _PyEventRc_Decref(done_event);
-    }
-
 #ifdef Py_GIL_DISABLED
     // Each thread should clear own freelists in free-threading builds.
     struct _Py_object_freelists *freelists = _Py_object_freelists_GET();
@@ -1675,6 +1657,22 @@ tstate_delete_common(PyThreadState *tstate)
         }
     }
     HEAD_UNLOCK(runtime);
+
+    _PyEventRc *done_event = tstate->done_event;
+    tstate->done_event = NULL;
+
+    // Notify threads waiting on Thread.join(). This should happen after the
+    // thread state is unlinked, but must happen before the parking lot is
+    // deinitialized.
+    //
+    // For the "main" thread of each interpreter, this is meant to be done in
+    // _PyInterpreterState_SetNotRunningMain().  However, we also accommodate
+    // "main" threads that still don't call
+    // _PyInterpreterState_SetNotRunningMain() yet.
+    if (done_event) {
+        _PyEvent_Notify(&done_event->event);
+        _PyEventRc_Decref(done_event);
+    }
 
     // XXX Unbind in PyThreadState_Clear(), or earlier
     // (and assert not-equal here)?
