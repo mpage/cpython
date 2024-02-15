@@ -1503,7 +1503,7 @@ do_start_new_thread(thread_module_state* state,
                     PyObject *func, PyObject* args, PyObject* kwargs,
                     int joinable,
                     PyThread_ident_t* ident, PyThread_handle_t* handle,
-                    _PyEventRc *thread_is_exiting)
+                    PyObject *done_event, _PyEventRc *thread_is_exiting, int daemon)
 {
     PyInterpreterState *interp = _PyInterpreterState_GET();
     if (!_PyInterpreterState_HasFeature(interp, Py_RTFLAGS_THREADS)) {
@@ -1541,6 +1541,7 @@ do_start_new_thread(thread_module_state* state,
         }
         return -1;
     }
+    boot->tstate->is_daemon = daemon;
     boot->func = Py_NewRef(func);
     boot->args = Py_NewRef(args);
     boot->kwargs = Py_XNewRef(kwargs);
@@ -1606,7 +1607,7 @@ thread_PyThread_start_new_thread(PyObject *module, PyObject *fargs,
     PyThread_ident_t ident = 0;
     PyThread_handle_t handle;
     if (do_start_new_thread(state, func, args, kwargs, /*joinable=*/ 0,
-                            &ident, &handle, NULL)) {
+                            &ident, &handle, NULL, NULL, daemon)) {
         return NULL;
     }
     return PyLong_FromUnsignedLongLong(ident);
@@ -1663,7 +1664,7 @@ thread_PyThread_start_joinable_thread(PyObject *module, PyObject *fargs,
         return NULL;
     }
     if (do_start_new_thread(state, func, args, /*kwargs=*/ NULL, /*joinable=*/ 1,
-                            &hobj->ident, &hobj->handle, hobj->thread_is_exiting)) {
+                            &hobj->ident, &hobj->handle, done_event, hobj->thread_is_exiting, daemon)) {
         Py_DECREF(args);
         Py_DECREF(hobj);
         return NULL;
