@@ -319,12 +319,82 @@ join_thread(ThreadHandleObject *handle)
     return 0;
 }
 
+static int
+parse_join_deadline(PyObject *args, _PyTime_t *deadline)
+{
+    PyObject *timeout_obj;
+    if (!PyArg_ParseTuple(args, "|O:join", &timeout_obj)) {
+        return -1;
+    }
+
+    if (timeout_obj == NULL || timeout_obj == Py_None) {
+        return 0;
+    }
+
+    _PyTime_t timeout_ns;
+    if  (_PyTime_FromSecondsObject(&timeout_ns, timeout_obj,
+                                   _PyTime_ROUND_TIMEOUT) < 0) {
+        return -1;
+    }
+    *deadline = _PyDeadline_Init(timeout_ns);
+
+    return 0;
+}
+
+typedef enum {
+    WAIT_ERROR = -1,
+    WAIT_SUCCESS,
+    WAIT_TIMEOUT,
+} WaitStatus;
+
+// Return the amount of time left until deadline, with -1 indicating and
+// infinite amount of time.
+static _PyTime_t
+get_timeout_ns(_PyTime_t deadline)
+{
+    if (deadline == 0) {
+        return -1;
+    }
+    _PyTime_t timeout_ns = _PyDeadline_Get(deadline);
+    return timeout_ns < 0 ? 0 : timeout_ns;
+}
+
+// Wait until deadline for the thread to exit.
+//
+// A value of 0 for deadline means wait forever.
+static WaitStatus
+wait_for_thread(ThreadHandleObject *handle, _PyTime_t deadline)
+{
+    PyEvent *event = &handle->thread_is_exiting->event;
+    for (;;) {
+        _PyTime_t timeout_ns = get_timeout_ns(deadline);
+        if (timeout_ns == 0) {
+            return WAIT_TIMEOUT;
+        }
+
+        if (PyEvent_WaitTimed(event, timeout_ns)) {
+            return WAIT_SUCCESS;
+        }
+        else if (get_timeout_ns(deadline) > 0) {
+            // Interrupted
+            if (Py_MakePendingCalls() < 0) {
+                return WAIT_ERROR;
+            }
+        }
+    }
+}
+
 static PyObject *
-ThreadHandle_join(ThreadHandleObject *self, void* ignored)
+ThreadHandle_join(ThreadHandleObject *self, PyObject *args)
 {
     if (get_thread_handle_state(self) == THREAD_HANDLE_INVALID) {
         PyErr_SetString(PyExc_ValueError,
                         "the handle is invalid and thus cannot be joined");
+        return NULL;
+    }
+
+    _PyTime_t deadline = 0;
+    if (parse_join_deadline(args, &deadline) < 0) {
         return NULL;
     }
 
@@ -345,6 +415,21 @@ ThreadHandle_join(ThreadHandleObject *self, void* ignored)
         return NULL;
     }
 
+    switch(wait_for_thread(self, deadline)) {
+    case WAIT_ERROR: {
+        return NULL;
+    }
+    case WAIT_SUCCESS: {
+        break;
+    }
+    case WAIT_TIMEOUT: {
+        Py_RETURN_NONE;
+    }
+    default: {
+        Py_UNREACHABLE();
+    }
+    }
+
     if (_PyOnceFlag_CallOnce(&self->once, (_Py_once_fn_t *)join_thread,
                              self) == -1) {
         return NULL;
@@ -360,7 +445,7 @@ static PyGetSetDef ThreadHandle_getsetlist[] = {
 
 static PyMethodDef ThreadHandle_methods[] =
 {
-    {"join", (PyCFunction)ThreadHandle_join, METH_NOARGS},
+    {"join", (PyCFunction)ThreadHandle_join, METH_VARARGS, NULL},
     {0, 0}
 };
 
