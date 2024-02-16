@@ -915,8 +915,8 @@ class Thread:
             self._native_id = None
         self._join_lock = None
         self._handle = None
-        self._started = Event()
         self._done_event = _Event()
+        self._started = Event()
         self._initialized = True
         # Copy of sys.stderr used by self._invoke_excepthook()
         self._stderr = _sys.stderr
@@ -930,20 +930,17 @@ class Thread:
         if new_ident is not None:
             # This thread is alive.
             self._ident = new_ident
-            if self._handle is not None:
-                assert self._handle.ident == new_ident
-        else:
-            # This thread isn't alive after fork: it doesn't have a tstate
-            # anymore.
-            self._done_event.set()
-            self._handle = None
+            assert self._handle.ident == new_ident
+        # Otherwise, the thread is dead, Jim. _PyThread_AfterFork() has
+        # conveniently marked our handle, if we had one, as dead.
 
     def __repr__(self):
         assert self._initialized, "Thread.__init__() was not called"
         status = "initial"
         if self._started.is_set():
             status = "started"
-        if self._done_event.is_set():
+        # XXX - wrong post fork
+        if self._handle and self._handle.is_done():
             status = "stopped"
         if self._daemonic:
             status += " daemon"
@@ -1088,15 +1085,8 @@ class Thread:
         # historically .join(timeout=x) for x<0 has acted as if timeout=0
         if timeout is not None:
             timeout = max(timeout, 0)
-        self._done_event.wait(timeout)
 
-        if self._done_event.is_set():
-            self._join_os_thread()
-
-    def _join_os_thread(self):
-        # self._handle may be cleared post-fork
-        if self._handle is not None:
-            self._handle.join()
+        self._handle.join(timeout)
 
     @property
     def name(self):
@@ -1147,7 +1137,7 @@ class Thread:
 
         """
         assert self._initialized, "Thread.__init__() not called"
-        return self._started.is_set() and not self._done_event.is_set()
+        return self._started.is_set() and not self._handle.is_done()
 
     @property
     def daemon(self):
@@ -1408,7 +1398,6 @@ class _DummyThread(Thread):
     def __init__(self):
         Thread.__init__(self, name=_newname("Dummy-%d"),
                         daemon=_daemon_threads_allowed())
-        self._done_event = _get_done_event()
         self._started.set()
         self._set_ident()
         if _HAVE_THREAD_NATIVE_ID:
@@ -1418,7 +1407,8 @@ class _DummyThread(Thread):
         _DeleteDummyThreadOnDel(self)
 
     def is_alive(self):
-        if self._started.is_set() and not self._done_event.is_set():
+        # XXX - This needs to return false post fork
+        if self._started.is_set():
             return True
         raise RuntimeError("thread is not alive")
 
