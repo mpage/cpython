@@ -438,6 +438,17 @@ ThreadHandle_join(ThreadHandleObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
+static PyObject *
+ThreadHandle_is_done(ThreadHandleObject *self, PyObject *Py_UNUSED(ignored))
+{
+    if (_PyEvent_IsSet(&self->thread_is_exiting->event)) {
+        Py_RETURN_TRUE;
+    }
+    else {
+        Py_RETURN_FALSE;
+    }
+}
+
 static PyGetSetDef ThreadHandle_getsetlist[] = {
     {"ident", (getter)ThreadHandle_get_ident, NULL, NULL},
     {0},
@@ -446,6 +457,7 @@ static PyGetSetDef ThreadHandle_getsetlist[] = {
 static PyMethodDef ThreadHandle_methods[] =
 {
     {"join", (PyCFunction)ThreadHandle_join, METH_VARARGS, NULL},
+    {"is_done", (PyCFunction)ThreadHandle_is_done, METH_NOARGS, NULL},
     {0, 0}
 };
 
