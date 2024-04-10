@@ -497,7 +497,7 @@ jobs:
   build_tsan_free_threading:
     name: 'Thread sanitizer (free-threading)'
     needs: check_source
-    if: needs.check_source.outputs.run_tests == 'true' && false
+    if: needs.check_source.outputs.run_tests == 'true'
     uses: ./.github/workflows/reusable-tsan.yml
     with:
       config_hash: ${{ needs.check_source.outputs.config_hash }}
