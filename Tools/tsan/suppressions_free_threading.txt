@@ -46,6 +46,7 @@ race:internal_connect
 race:long_dealloc
 race:lookup_tp_dict
 race:mi_heap_visit_pages
+race:Py_SET_REFCNT
 race:Py_TYPE
 race:PyDict_GET_SIZE
 race:PyMember_GetOne
