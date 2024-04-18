@@ -4944,7 +4944,9 @@
                 if ((oparg & RESUME_OPARG_LOCATION_MASK) < RESUME_AFTER_YIELD_FROM) {
                     CHECK_EVAL_BREAKER();
                 }
+                #ifndef Py_GIL_DISABLED
                 this_instr->op.code = RESUME_CHECK;
+                #endif
             }
             DISPATCH();
         }
