@@ -6,14 +6,15 @@
 
 ## Default build suppresssions
 
+leak:pthread_create
 race:get_allocator_unlocked
 race:set_allocator_unlocked
 
 ## Free-threaded suppressions
-
 race:_add_to_weak_set
 race:_in_weak_set
 race:_mi_heap_delayed_free_partial
+race:_multiprocessing_SemLock_acquire_impl
 race:_Py_IsImmortal
 race:_Py_IsOwnedByCurrentThread
 race:_Py_qsbr_poll
