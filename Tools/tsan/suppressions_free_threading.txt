@@ -6,7 +6,7 @@
 
 ## Default build suppresssions
 
-leak:pthread_create
+thread:pthread_create
 race:get_allocator_unlocked
 race:set_allocator_unlocked
 
