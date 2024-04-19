@@ -54,6 +54,7 @@ jobs:
     - name: Tests
       run: ./python -m test --tsan -j4
     - name: Archive TSAN logs
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: tsan-logs
