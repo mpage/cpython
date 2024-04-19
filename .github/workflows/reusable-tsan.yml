@@ -34,7 +34,7 @@ jobs:
         sudo sysctl -w vm.mmap_rnd_bits=28
     - name: TSAN Option Setup
       run: |
-        echo "TSAN_OPTIONS=suppressions=${GITHUB_WORKSPACE}/${{ inputs.suppressions_path }}" >> $GITHUB_ENV
+        echo "TSAN_OPTIONS=log_path=${GITHUB_WORKSPACE}/tsan_log suppressions=${GITHUB_WORKSPACE}/${{ inputs.suppressions_path }}" >> $GITHUB_ENV
         echo "CC=clang" >> $GITHUB_ENV
         echo "CXX=clang++" >> $GITHUB_ENV
     - name: Add ccache to PATH
@@ -53,3 +53,8 @@ jobs:
       run: make pythoninfo
     - name: Tests
       run: ./python -m test --tsan -j4
+    - name: Archive TSAN logs
+      uses: actions/upload-artifact@v4
+      with:
+        name: tsan-logs
+        path: tsan_log.*
