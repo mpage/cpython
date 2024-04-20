@@ -9,6 +9,7 @@
 thread:pthread_create
 race:get_allocator_unlocked
 race:set_allocator_unlocked
+signal:_Py_DumpTracebackThreads
 
 ## Free-threaded suppressions
 race:_add_to_weak_set
@@ -51,6 +52,7 @@ race:insertdict
 race:instrument_lock_held
 race:internal_connect
 race:list_extend_fast
+race:local_clear
 race:long_dealloc
 race:lookup_tp_dict
 race:maybe_freelist_push
