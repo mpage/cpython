@@ -6,10 +6,10 @@
 
 ## Default build suppresssions
 
-thread:pthread_create
 race:get_allocator_unlocked
 race:set_allocator_unlocked
 signal:_Py_DumpTracebackThreads
+thread:pthread_create
 
 ## Free-threaded suppressions
 race:_add_to_weak_set
@@ -33,6 +33,7 @@ race:_PyObject_GC_SET_SHARED
 race:_PyObject_GC_TRACK
 race:_PyObject_TryGetInstanceAttribute
 race:_PySemaphore_Wait
+race:_PyThreadState_DeleteList
 race:_PyType_HasFeature
 race:assign_version_tag
 race:compare_unicode_unicode
