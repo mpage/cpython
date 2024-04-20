@@ -34,6 +34,7 @@ race:_PyObject_GC_TRACK
 race:_PyObject_TryGetInstanceAttribute
 race:_PySemaphore_Wait
 race:_PyThreadState_DeleteList
+race:_PyThreadState_Suspend
 race:_PyType_HasFeature
 race:assign_version_tag
 race:compare_unicode_unicode
@@ -54,6 +55,7 @@ race:instrument_lock_held
 race:internal_connect
 race:list_extend_fast
 race:local_clear
+race:long_compare
 race:long_dealloc
 race:lookup_tp_dict
 race:maybe_freelist_push
