@@ -32,7 +32,7 @@ race:_PyObject_GC_IS_SHARED
 race:_PyObject_GC_SET_SHARED
 race:_PyObject_GC_TRACK
 race:_PyObject_TryGetInstanceAttribute
-# race:_PySemaphore_Wait
+race:_PySemaphore_Wait
 race:_PyThreadState_DeleteList
 race:_PyThreadState_Suspend
 race:_PyType_HasFeature
