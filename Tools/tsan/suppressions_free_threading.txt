@@ -10,37 +10,69 @@ race:get_allocator_unlocked
 race:set_allocator_unlocked
 
 ## Free-threaded suppressions
-
-race:_add_to_weak_set
-race:_in_weak_set
-race:_mi_heap_delayed_free_partial
-race:_Py_IsImmortal
-race:_Py_IsOwnedByCurrentThread
-race:_PyEval_EvalFrameDefault
-race:_PyFunction_SetVersion
-race:_PyImport_AcquireLock
-race:_PyImport_ReleaseLock
-race:_PyInterpreterState_SetNotRunningMain
-race:_PyInterpreterState_IsRunningMain
-race:_PyObject_GC_IS_SHARED
-race:_PyObject_GC_SET_SHARED
-race:_PyObject_GC_TRACK
-race:_PyType_HasFeature
-race:assign_version_tag
-race:compare_unicode_unicode
-race:delitem_common
-race:dictresize
-race:gc_collect_main
-race:gc_restore_tid
-race:initialize_new_array
-race:insertdict
-race:lookup_tp_dict
-race:mi_heap_visit_pages
-race:PyMember_GetOne
-race:PyMember_SetOne
-race:new_reference
-race:set_contains_key
-race:set_inheritable
-race:start_the_world
-race:tstate_set_detached
-race:unicode_hash
+# race:_add_to_weak_set
+# race:_in_weak_set
+# race:_mi_heap_delayed_free_partial
+# race:_multiprocessing_SemLock_acquire_impl
+# race:_multiprocessing_SemLock_release_impl
+# race:_Py_DecRefSharedDebug
+# race:_Py_DumpTracebackThreads
+# race:_Py_IsImmortal
+# race:_Py_IsOwnedByCurrentThread
+# race:_Py_qsbr_poll
+# race:_Py_TryIncrefFast
+# race:_PyFunction_SetVersion
+# race:_PyImport_AcquireLock
+# race:_PyImport_ReleaseLock
+# race:_PyInterpreterState_SetNotRunningMain
+# race:_PyInterpreterState_IsRunningMain
+# race:_PyObject_GC_IS_SHARED
+# race:_PyObject_GC_SET_SHARED
+# race:_PyObject_GC_TRACK
+# race:_PyObject_TryGetInstanceAttribute
+# race:_PySemaphore_Wait
+# race:_PyThreadState_DeleteList
+# race:_PyThreadState_Suspend
+# race:_PyType_HasFeature
+# race:assign_version_tag
+# race:compare_unicode_unicode
+# race:count_next
+# race:delitem_common
+# race:dequeue_all
+# race:detach_thread
+# race:dictkeys_decref
+# race:dictkeys_incref
+# race:dictresize
+# race:gc_collect_main
+# race:gc_restore_tid
+# race:grow_thread_array
+# race:init_code
+# race:initialize_new_array
+# race:insertdict
+# race:instrument_lock_held
+# race:internal_connect
+# race:list_extend_fast
+# race:local_clear
+# race:long_compare
+# race:long_dealloc
+# race:lookup_tp_dict
+# race:maybe_freelist_push
+# race:memset
+# race:mi_heap_visit_pages
+# race:Py_SET_REFCNT
+# race:Py_TYPE
+# race:PyDict_GET_SIZE
+# race:PyMember_GetOne
+# race:PyMember_SetOne
+# race:new_reference
+# race:set_contains_key
+# race:set_inheritable
+# race:sock_close
+# race:sock_recv_impl
+# race:start_the_world
+# race:tstate_set_detached
+# race:type_modified_unlocked
+# race:unicode_hash
+#
+# signal:_Py_DumpTracebackThreads
+# thread:pthread_create
