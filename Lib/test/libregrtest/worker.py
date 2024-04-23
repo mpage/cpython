@@ -55,7 +55,9 @@ def create_worker_process(runtests: WorkerRunTests, output_fd: int,
     json_file.configure_subprocess(kwargs)
 
     with json_file.inherit_subprocess():
-        return subprocess.Popen(cmd, **kwargs)
+        popen = subprocess.Popen(cmd, **kwargs)
+        print(f"==== SPAWN_WORKER - {os.getpid()} spawned {popen.pid}")
+        return popen
 
 
 def worker_process(worker_json: StrJSON) -> NoReturn:
