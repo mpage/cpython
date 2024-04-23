@@ -8,8 +8,6 @@
 
 race:get_allocator_unlocked
 race:set_allocator_unlocked
-signal:_Py_DumpTracebackThreads
-thread:pthread_create
 
 ## Free-threaded suppressions
 race:_add_to_weak_set
@@ -75,3 +73,6 @@ race:start_the_world
 race:tstate_set_detached
 race:type_modified_unlocked
 race:unicode_hash
+
+signal:_Py_DumpTracebackThreads
+thread:pthread_create
