@@ -46,7 +46,7 @@ jobs:
         save: ${{ github.event_name == 'push' }}
         max-size: "200M"
     - name: Show HEAD
-      run: echo "${GITHUB_SHA}" && git show ${GITHUB_SHA}
+      run: echo "${GITHUB_SHA}"
     - name: Configure CPython
       run: ${{ inputs.options }}
     - name: Build CPython
