@@ -1114,10 +1114,11 @@ compare_unicode_unicode(PyDictObject *mp, PyDictKeysObject *dk,
                         void *ep0, Py_ssize_t ix, PyObject *key, Py_hash_t hash)
 {
     PyDictUnicodeEntry *ep = &((PyDictUnicodeEntry *)ep0)[ix];
-    assert(ep->me_key != NULL);
-    assert(PyUnicode_CheckExact(ep->me_key));
-    if (ep->me_key == key ||
-            (unicode_get_hash(ep->me_key) == hash && unicode_eq(ep->me_key, key))) {
+    PyObject *ep_key = FT_ATOMIC_LOAD_PTR_RELAXED(ep->me_key);
+    assert(ep_key != NULL);
+    assert(PyUnicode_CheckExact(ep_key));
+    if (ep_key == key ||
+            (unicode_get_hash(ep_key) == hash && unicode_eq(ep_key, key))) {
         return 1;
     }
     return 0;
@@ -1806,10 +1807,12 @@ insertdict(PyInterpreterState *interp, PyDictObject *mp,
         else {
             assert(old_value != NULL);
             if (DK_IS_UNICODE(mp->ma_keys)) {
-                DK_UNICODE_ENTRIES(mp->ma_keys)[ix].me_value = value;
+                PyDictUnicodeEntry *ep = &DK_UNICODE_ENTRIES(mp->ma_keys)[ix];
+                STORE_VALUE(ep, value);
             }
             else {
-                DK_ENTRIES(mp->ma_keys)[ix].me_value = value;
+                PyDictKeyEntry *ep = &DK_ENTRIES(mp->ma_keys)[ix];
+                STORE_VALUE(ep, value);
             }
         }
         mp->ma_version_tag = new_version;
@@ -1855,15 +1858,15 @@ insert_to_emptydict(PyInterpreterState *interp, PyDictObject *mp,
     if (unicode) {
         PyDictUnicodeEntry *ep = DK_UNICODE_ENTRIES(newkeys);
         ep->me_key = key;
-        ep->me_value = value;
+        STORE_VALUE(ep, value);
     }
     else {
         PyDictKeyEntry *ep = DK_ENTRIES(newkeys);
         ep->me_key = key;
         ep->me_hash = hash;
-        ep->me_value = value;
+        STORE_VALUE(ep, value);
     }
-    mp->ma_used++;
+    FT_ATOMIC_STORE_SSIZE_RELAXED(mp->ma_used, FT_ATOMIC_LOAD_SSIZE_RELAXED(mp->ma_used) + 1);
     mp->ma_version_tag = new_version;
     newkeys->dk_usable--;
     newkeys->dk_nentries++;
@@ -2555,7 +2558,7 @@ delitem_common(PyDictObject *mp, Py_hash_t hash, Py_ssize_t ix,
     Py_ssize_t hashpos = lookdict_index(mp->ma_keys, hash, ix);
     assert(hashpos >= 0);
 
-    mp->ma_used--;
+    FT_ATOMIC_STORE_SSIZE_RELAXED(mp->ma_used, FT_ATOMIC_LOAD_SSIZE(mp->ma_used) - 1);
     mp->ma_version_tag = new_version;
     if (_PyDict_HasSplitTable(mp)) {
         assert(old_value == mp->ma_values->values[ix]);
@@ -6947,7 +6950,7 @@ _PyObject_TryGetInstanceAttribute(PyObject *obj, PyObject *name, PyObject **attr
     }
 
 #ifdef Py_GIL_DISABLED
-    PyObject *value = _Py_atomic_load_ptr_relaxed(&values->values[ix]);
+    PyObject *value = _Py_atomic_load_ptr_acquire(&values->values[ix]);
     if (value == NULL || _Py_TryIncrefCompare(&values->values[ix], value)) {
         *attr = value;
         return true;
