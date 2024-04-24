@@ -16,7 +16,7 @@ jobs:
   build_tsan_reusable:
     name: 'Thread sanitizer'
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 20
     steps:
     - uses: actions/checkout@v4
     - name: Runner image version
@@ -34,7 +34,7 @@ jobs:
         sudo sysctl -w vm.mmap_rnd_bits=28
     - name: TSAN Option Setup
       run: |
-        echo "TSAN_OPTIONS=suppressions=${GITHUB_WORKSPACE}/${{ inputs.suppressions_path }}" >> $GITHUB_ENV
+        echo "TSAN_OPTIONS=log_path=${GITHUB_WORKSPACE}/tsan_log suppressions=${GITHUB_WORKSPACE}/${{ inputs.suppressions_path }}" >> $GITHUB_ENV
         echo "CC=clang" >> $GITHUB_ENV
         echo "CXX=clang++" >> $GITHUB_ENV
     - name: Add ccache to PATH
@@ -45,6 +45,8 @@ jobs:
       with:
         save: ${{ github.event_name == 'push' }}
         max-size: "200M"
+    - name: Show HEAD
+      run: echo "${GITHUB_SHA}"
     - name: Configure CPython
       run: ${{ inputs.options }}
     - name: Build CPython
@@ -53,3 +55,9 @@ jobs:
       run: make pythoninfo
     - name: Tests
       run: ./python -m test --tsan -j4
+    - name: Archive TSAN logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: tsan-logs
+        path: tsan_log.*
