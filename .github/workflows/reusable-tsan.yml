@@ -45,6 +45,8 @@ jobs:
       with:
         save: ${{ github.event_name == 'push' }}
         max-size: "200M"
+    - name: Show HEAD
+      run: git log HEAD~1..HEAD
     - name: Configure CPython
       run: ${{ inputs.options }}
     - name: Build CPython
