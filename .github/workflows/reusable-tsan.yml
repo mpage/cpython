@@ -48,7 +48,13 @@ jobs:
     - name: Show clang version
       run: clang --version
     - name: Show llvm-symbolizer version
-      run: which llvm-symbolizer && llvm-symbolizer --version
+      run: |
+        echo "===> dpkg:"
+        dpkg -S llvm-symbolizer
+        echo "===> path:"
+        which llvm-symbolizer
+        echo "===> clang:"
+        apt-cache show clang
     - name: Show HEAD
       run: echo "${GITHUB_SHA}"
     - name: Configure CPython
