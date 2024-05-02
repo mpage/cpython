@@ -29,6 +29,8 @@ jobs:
     - name: Install Dependencies
       run: |
         sudo ./.github/workflows/posix-deps-apt.sh
+        sudo deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main
+        sudo deb-src http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main
         sudo apt install -y clang-17
         # Reduce ASLR to avoid TSAN crashing
         sudo sysctl -w vm.mmap_rnd_bits=28
