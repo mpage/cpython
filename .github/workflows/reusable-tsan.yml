@@ -33,7 +33,9 @@ jobs:
         chmod +x llvm.sh
         sudo ./llvm.sh 18
         sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100
+        sudo update-alternatives --set clang /usr/bin/clang-18
         sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100
+        sudo update-alternatives --set clang++ /usr/bin/clang++-18
         echo "===> Clang"
         which clang
         # Reduce ASLR to avoid TSAN crashing
