@@ -32,8 +32,8 @@ jobs:
         wget https://apt.llvm.org/llvm.sh
         chmod +x llvm.sh
         sudo ./llvm.sh 18
-        sudo ln /usr/bin/clang-18 /usr/bin/clang
-        sudo ln /usr/bin/clang++-18 /usr/bin/clang++
+        sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100
+        sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100
         # Reduce ASLR to avoid TSAN crashing
         sudo sysctl -w vm.mmap_rnd_bits=28
     - name: TSAN Option Setup
