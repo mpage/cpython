@@ -781,8 +781,7 @@ class ThreadTests(BaseTestCase):
                          "current is main True\n"
                          )
 
-    @unittest.skipIf(sys.platform in platforms_to_skip, "due to known OS bug")
-    @support.requires_fork()
+    @skip_unless_reliable_fork
     @unittest.skipUnless(hasattr(os, 'waitpid'), "test needs os.waitpid()")
     def test_main_thread_after_fork_from_foreign_thread(self, create_dummy=False):
         code = """if 1:
