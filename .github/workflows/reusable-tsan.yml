@@ -38,6 +38,10 @@ jobs:
         sudo update-alternatives --set clang++ /usr/bin/clang++-18
         echo "===> Clang"
         which clang
+        echo "===> file clang"
+        file /usr/bin/clang
+        echo "===> clang version"
+        clang --version
         # Reduce ASLR to avoid TSAN crashing
         sudo sysctl -w vm.mmap_rnd_bits=28
     - name: TSAN Option Setup
