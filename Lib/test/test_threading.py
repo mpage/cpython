@@ -49,7 +49,7 @@ def skip_unless_reliable_fork(test):
     if support.HAVE_ASAN_FORK_BUG:
         return unittest.skip("libasan has a pthread_create() dead lock related to thread+fork")(test)
     if support.check_sanitizer(thread=True):
-        return unittest.skip("TSAN doesn't support threads after fork")
+        return unittest.skip("TSAN doesn't support threads after fork")(test)
     return test
 
 
