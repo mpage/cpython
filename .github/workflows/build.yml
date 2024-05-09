@@ -108,4 +108,4 @@ jobs:
     with:
       config_hash: ${{ needs.check_source.outputs.config_hash }}
       options: ./configure --config-cache --disable-gil --with-thread-sanitizer --with-pydebug
-      suppressions_path: Tools/tsan/suppressions_free_threading.txt
+      suppressions_path: Tools/tsan/supressions.txt
