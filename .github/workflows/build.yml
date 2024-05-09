@@ -5,6 +5,14 @@ name: Tests
 # mandatory but not scheduled because of "paths-ignore".
 on:
   workflow_dispatch:
+  push:
+    branches:
+    - 'main'
+    - '3.*'
+  pull_request:
+    branches:
+    - 'main'
+    - '3.*'
 
 permissions:
   contents: read
@@ -91,6 +99,7 @@ jobs:
         id: docs-changes
         run: |
           echo "run-docs=true" >> "${GITHUB_OUTPUT}"
+
   build_tsan_free_threading:
     name: 'Thread sanitizer (free-threading)'
     needs: check_source
