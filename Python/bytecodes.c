@@ -1572,23 +1572,24 @@ dummy_func(
             builtins_version/1 +
             _LOAD_GLOBAL;
 
-        op(_GUARD_GLOBALS_VERSION, (version/1 --)) {
+        op(_GUARD_GLOBALS_VERSION, (version/1 -- globals_keys: PyDictKeysObject*)) {
             PyDictObject *dict = (PyDictObject *)GLOBALS();
             DEOPT_IF(!PyDict_CheckExact(dict));
-            DEOPT_IF(dict->ma_keys->dk_version != version);
-            assert(DK_IS_UNICODE(dict->ma_keys));
+            globals_keys = dict->ma_keys;
+            DEOPT_IF(globals_keys->dk_version != version);
+            assert(DK_IS_UNICODE(globals_keys));
         }
 
-        op(_GUARD_BUILTINS_VERSION, (version/1 --)) {
+        op(_GUARD_BUILTINS_VERSION, (version/1 -- builtins_keys: PyDictKeysObject*)) {
             PyDictObject *dict = (PyDictObject *)BUILTINS();
             DEOPT_IF(!PyDict_CheckExact(dict));
-            DEOPT_IF(dict->ma_keys->dk_version != version);
-            assert(DK_IS_UNICODE(dict->ma_keys));
+            builtins_keys = dict->ma_keys;
+            DEOPT_IF(builtins_keys->dk_version != version);
+            assert(DK_IS_UNICODE(builtins_keys));
         }
 
-        op(_LOAD_GLOBAL_MODULE, (index/1 -- res, null if (oparg & 1))) {
-            PyDictObject *dict = (PyDictObject *)GLOBALS();
-            PyDictUnicodeEntry *entries = DK_UNICODE_ENTRIES(dict->ma_keys);
+        op(_LOAD_GLOBAL_MODULE, (index/1, globals_keys: PyDictKeysObject* -- res, null if (oparg & 1))) {
+            PyDictUnicodeEntry *entries = DK_UNICODE_ENTRIES(globals_keys);
             PyObject *res_o = entries[index].me_value;
             DEOPT_IF(res_o == NULL);
             Py_INCREF(res_o);
@@ -1597,9 +1598,8 @@ dummy_func(
             res = PyStackRef_FromPyObjectSteal(res_o);
         }
 
-        op(_LOAD_GLOBAL_BUILTINS, (index/1 -- res, null if (oparg & 1))) {
-            PyDictObject *bdict = (PyDictObject *)BUILTINS();
-            PyDictUnicodeEntry *entries = DK_UNICODE_ENTRIES(bdict->ma_keys);
+        op(_LOAD_GLOBAL_BUILTINS, (index/1, globals_keys: PyDictKeysObject*, builtins_keys: PyDictKeysObject* -- res, null if (oparg & 1))) {
+            PyDictUnicodeEntry *entries = DK_UNICODE_ENTRIES(builtins_keys);
             PyObject *res_o = entries[index].me_value;
             DEOPT_IF(res_o == NULL);
             Py_INCREF(res_o);

@@ -845,10 +845,20 @@
         }
 
         case _GUARD_GLOBALS_VERSION: {
+            PyDictKeysObject *globals_keys;
+            globals_keys = sym_new_not_null(ctx);
+            stack_pointer[0] = (_Py_UopsSymbol *)globals_keys;
+            stack_pointer += 1;
+            assert(WITHIN_STACK_BOUNDS());
             break;
         }
 
         case _GUARD_BUILTINS_VERSION: {
+            PyDictKeysObject *builtins_keys;
+            builtins_keys = sym_new_not_null(ctx);
+            stack_pointer[0] = (_Py_UopsSymbol *)builtins_keys;
+            stack_pointer += 1;
+            assert(WITHIN_STACK_BOUNDS());
             break;
         }
 
@@ -857,9 +867,9 @@
             _Py_UopsSymbol *null = NULL;
             res = sym_new_not_null(ctx);
             null = sym_new_null(ctx);
-            stack_pointer[0] = res;
-            if (oparg & 1) stack_pointer[1] = null;
-            stack_pointer += 1 + (oparg & 1);
+            stack_pointer[-1] = res;
+            if (oparg & 1) stack_pointer[0] = null;
+            stack_pointer += (oparg & 1);
             assert(WITHIN_STACK_BOUNDS());
             break;
         }
@@ -869,9 +879,9 @@
             _Py_UopsSymbol *null = NULL;
             res = sym_new_not_null(ctx);
             null = sym_new_null(ctx);
-            stack_pointer[0] = res;
-            if (oparg & 1) stack_pointer[1] = null;
-            stack_pointer += 1 + (oparg & 1);
+            stack_pointer[-2] = res;
+            if (oparg & 1) stack_pointer[-1] = null;
+            stack_pointer += -1 + (oparg & 1);
             assert(WITHIN_STACK_BOUNDS());
             break;
         }

@@ -749,9 +749,9 @@ int _PyUop_num_popped(int opcode, int oparg)
         case _GUARD_BUILTINS_VERSION:
             return 0;
         case _LOAD_GLOBAL_MODULE:
-            return 0;
+            return 1;
         case _LOAD_GLOBAL_BUILTINS:
-            return 0;
+            return 2;
         case _DELETE_FAST:
             return 0;
         case _MAKE_CELL:
