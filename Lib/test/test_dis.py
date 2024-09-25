@@ -1224,7 +1224,7 @@ class DisTests(DisTestBase):
             f()
 
     @cpython_only
-    @requires_specialization
+    @requires_specialization_ft
     def test_super_instructions(self):
         self.code_quicken(lambda: load_test(0, 0))
         got = self.get_disassembly(load_test, adaptive=True)
