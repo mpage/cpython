@@ -1464,7 +1464,7 @@ PyObject *descr, DescriptorClassification kind, bool is_method)
 }
 
 void
-_Py_Specialize_LoadGlobal(
+specialize_load_global_lock_held(
     PyObject *globals, PyObject *builtins,
     _Py_CODEUNIT *instr, PyObject *name)
 {
@@ -1487,6 +1487,8 @@ _Py_Specialize_LoadGlobal(
         SPECIALIZATION_FAIL(LOAD_GLOBAL, SPEC_FAIL_EXPECTED_ERROR);
         goto fail;
     }
+    uint8_t specialized_opcode;
+    _PyLoadGlobalCache new_cache;
     PyInterpreterState *interp = _PyInterpreterState_GET();
     if (index != DKIX_EMPTY) {
         if (index != (uint16_t)index) {
@@ -1503,9 +1505,9 @@ _Py_Specialize_LoadGlobal(
             SPECIALIZATION_FAIL(LOAD_GLOBAL, SPEC_FAIL_OUT_OF_RANGE);
             goto fail;
         }
-        cache->index = (uint16_t)index;
-        cache->module_keys_version = (uint16_t)keys_version;
-        instr->op.code = LOAD_GLOBAL_MODULE;
+        new_cache.index = (uint16_t)index;
+        new_cache.module_keys_version = (uint16_t)keys_version;
+        specialized_opcode = LOAD_GLOBAL_MODULE;
         goto success;
     }
     if (!PyDict_CheckExact(builtins)) {
@@ -1546,21 +1548,33 @@ _Py_Specialize_LoadGlobal(
         SPECIALIZATION_FAIL(LOAD_GLOBAL, SPEC_FAIL_OUT_OF_RANGE);
         goto fail;
     }
-    cache->index = (uint16_t)index;
-    cache->module_keys_version = (uint16_t)globals_version;
-    cache->builtin_keys_version = (uint16_t)builtins_version;
-    instr->op.code = LOAD_GLOBAL_BUILTIN;
+    new_cache.index = (uint16_t)index;
+    new_cache.module_keys_version = (uint16_t)globals_version;
+    new_cache.builtin_keys_version = (uint16_t)builtins_version;
+    specialized_opcode = LOAD_GLOBAL_BUILTIN;
     goto success;
 fail:
+    SET_OPCODE_OR_RETURN(instr, LOAD_GLOBAL);
     STAT_INC(LOAD_GLOBAL, failure);
     assert(!PyErr_Occurred());
-    instr->op.code = LOAD_GLOBAL;
     cache->counter = adaptive_counter_backoff(cache->counter);
     return;
 success:
+    SET_OPCODE_OR_RETURN(instr, specialized_opcode);
     STAT_INC(LOAD_GLOBAL, success);
+    *cache = new_cache;
     assert(!PyErr_Occurred());
     cache->counter = adaptive_counter_cooldown();
+}
+
+void
+_Py_Specialize_LoadGlobal(
+    PyObject *globals, PyObject *builtins,
+    _Py_CODEUNIT *instr, PyObject *name)
+{
+    Py_BEGIN_CRITICAL_SECTION2(globals, builtins);
+    specialize_load_global_lock_held(globals, builtins, instr, name);
+    Py_END_CRITICAL_SECTION2();
 }
 
 #ifdef Py_STATS

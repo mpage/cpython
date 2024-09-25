@@ -1575,24 +1575,28 @@ dummy_func(
         op(_GUARD_GLOBALS_VERSION, (version/1 -- globals_keys: PyDictKeysObject*)) {
             PyDictObject *dict = (PyDictObject *)GLOBALS();
             DEOPT_IF(!PyDict_CheckExact(dict));
-            globals_keys = dict->ma_keys;
-            DEOPT_IF(globals_keys->dk_version != version);
+            globals_keys = FT_ATOMIC_LOAD_PTR_ACQUIRE(dict->ma_keys);
+            DEOPT_IF(FT_ATOMIC_LOAD_UINT32_RELAXED(globals_keys->dk_version) != version);
             assert(DK_IS_UNICODE(globals_keys));
         }
 
         op(_GUARD_BUILTINS_VERSION, (version/1 -- builtins_keys: PyDictKeysObject*)) {
             PyDictObject *dict = (PyDictObject *)BUILTINS();
             DEOPT_IF(!PyDict_CheckExact(dict));
-            builtins_keys = dict->ma_keys;
-            DEOPT_IF(builtins_keys->dk_version != version);
+            builtins_keys = FT_ATOMIC_LOAD_PTR_ACQUIRE(dict->ma_keys);
+            DEOPT_IF(FT_ATOMIC_LOAD_UINT32_RELAXED(builtins_keys->dk_version) != version);
             assert(DK_IS_UNICODE(builtins_keys));
         }
 
         op(_LOAD_GLOBAL_MODULE, (index/1, globals_keys: PyDictKeysObject* -- res, null if (oparg & 1))) {
             PyDictUnicodeEntry *entries = DK_UNICODE_ENTRIES(globals_keys);
-            PyObject *res_o = entries[index].me_value;
+            PyObject *res_o = FT_ATOMIC_LOAD_PTR_RELAXED(entries[index].me_value);
             DEOPT_IF(res_o == NULL);
+            #if Py_GIL_DISABLED
+            DEOPT_IF(!_Py_TryIncrefCompare(&entries[index].me_value, res_o));
+            #else
             Py_INCREF(res_o);
+            #endif
             STAT_INC(LOAD_GLOBAL, hit);
             null = PyStackRef_NULL;
             res = PyStackRef_FromPyObjectSteal(res_o);
@@ -1600,9 +1604,13 @@ dummy_func(
 
         op(_LOAD_GLOBAL_BUILTINS, (index/1, globals_keys: PyDictKeysObject*, builtins_keys: PyDictKeysObject* -- res, null if (oparg & 1))) {
             PyDictUnicodeEntry *entries = DK_UNICODE_ENTRIES(builtins_keys);
-            PyObject *res_o = entries[index].me_value;
+            PyObject *res_o = FT_ATOMIC_LOAD_PTR_RELAXED(entries[index].me_value);
             DEOPT_IF(res_o == NULL);
+            #if Py_GIL_DISABLED
+            DEOPT_IF(!_Py_TryIncrefCompare(&entries[index].me_value, res_o));
+            #else
             Py_INCREF(res_o);
+            #endif
             STAT_INC(LOAD_GLOBAL, hit);
             null = PyStackRef_NULL;
             res = PyStackRef_FromPyObjectSteal(res_o);
