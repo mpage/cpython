@@ -5510,11 +5510,23 @@ _PyTypes_AfterFork(void)
     }
 #endif
 }
-
 /* Internal API to look for a name through the MRO.
-   This returns a borrowed reference, and doesn't set an exception! */
+   This returns a strong reference, and doesn't set an exception!
+*/
 PyObject *
 _PyType_LookupRef(PyTypeObject *type, PyObject *name)
+{
+    return _PyType_LookupRefAndVersion(type, name, NULL);
+}
+
+
+/* Internal API to look for a name through the MRO.
+   This returns a strong reference, and doesn't set an exception!
+   When this function returns a non-NULL result, version is set to the
+   corresponding type version, if one is set (0 is not a valid version).
+*/
+PyObject *
+_PyType_LookupRefAndVersion(PyTypeObject *type, PyObject *name, unsigned int *version)
 {
     PyObject *res;
     int error;
@@ -5537,6 +5549,9 @@ _PyType_LookupRef(PyTypeObject *type, PyObject *name)
             // If the sequence is still valid then we're done
             if (value == NULL || _Py_TryIncref(value)) {
                 if (_PySeqLock_EndRead(&entry->sequence, sequence)) {
+                    if (version != NULL) {
+                        *version = entry_version;
+                    }
                     return value;
                 }
                 Py_XDECREF(value);
@@ -5571,12 +5586,12 @@ _PyType_LookupRef(PyTypeObject *type, PyObject *name)
     // anyone else can modify our mro or mutate the type.
 
     int has_version = 0;
-    int version = 0;
+    unsigned int assigned_version = 0;
     BEGIN_TYPE_LOCK();
     res = find_name_in_mro(type, name, &error);
     if (MCACHE_CACHEABLE_NAME(name)) {
         has_version = assign_version_tag(interp, type);
-        version = type->tp_version_tag;
+        assigned_version = type->tp_version_tag;
     }
     END_TYPE_LOCK();
 
@@ -5598,15 +5613,21 @@ _PyType_LookupRef(PyTypeObject *type, PyObject *name)
 
     if (has_version) {
 #if Py_GIL_DISABLED
-        update_cache_gil_disabled(entry, name, version, res);
+        update_cache_gil_disabled(entry, name, assigned_version, res);
 #else
-        PyObject *old_value = update_cache(entry, name, version, res);
+        PyObject *old_value = update_cache(entry, name, assigned_version, res);
         Py_DECREF(old_value);
 #endif
+    }
+    if (version != NULL) {
+        // 0 is not a valid version
+        *version = has_version ? assigned_version : 0;
     }
     return res;
 }
 
+/* Internal API to look for a name through the MRO.
+   This returns a borrowed reference, and doesn't set an exception! */
 PyObject *
 _PyType_Lookup(PyTypeObject *type, PyObject *name)
 {
