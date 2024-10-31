@@ -3316,7 +3316,7 @@ dummy_func(
         };
 
         specializing op(_SPECIALIZE_CALL, (counter/1, callable[1], self_or_null[1], args[oparg] -- callable[1], self_or_null[1], args[oparg])) {
-            #if ENABLE_SPECIALIZATION
+            #if ENABLE_SPECIALIZATION_FT
             if (ADAPTIVE_COUNTER_TRIGGERS(counter)) {
                 next_instr = this_instr;
                 _Py_Specialize_Call(callable[0], next_instr, oparg + !PyStackRef_IsNull(self_or_null[0]));
@@ -3324,7 +3324,7 @@ dummy_func(
             }
             OPCODE_DEFERRED_INC(CALL);
             ADVANCE_ADAPTIVE_COUNTER(this_instr[1].counter);
-            #endif  /* ENABLE_SPECIALIZATION */
+            #endif  /* ENABLE_SPECIALIZATION_FT */
         }
 
         op(_MAYBE_EXPAND_METHOD, (callable[1], self_or_null[1], args[oparg] -- func[1], maybe_self[1], args[oparg])) {
@@ -3662,11 +3662,12 @@ dummy_func(
             DEOPT_IF(!PyStackRef_IsNull(null));
             DEOPT_IF(callable_o != (PyObject *)&PyUnicode_Type);
             STAT_INC(CALL, hit);
-            res = PyStackRef_FromPyObjectSteal(PyObject_Str(arg_o));
+            PyObject *res_o = PyObject_Str(arg_o);
             DEAD(null);
             DEAD(callable);
             PyStackRef_CLOSE(arg);
-            ERROR_IF(PyStackRef_IsNull(res), error);
+            ERROR_IF(res_o == NULL, error);
+            res = PyStackRef_FromPyObjectSteal(res_o);
         }
 
         macro(CALL_STR_1) =
@@ -3683,11 +3684,12 @@ dummy_func(
             DEOPT_IF(!PyStackRef_IsNull(null));
             DEOPT_IF(callable_o != (PyObject *)&PyTuple_Type);
             STAT_INC(CALL, hit);
-            res = PyStackRef_FromPyObjectSteal(PySequence_Tuple(arg_o));
+            PyObject *res_o = PySequence_Tuple(arg_o);
             DEAD(null);
             DEAD(callable);
             PyStackRef_CLOSE(arg);
-            ERROR_IF(PyStackRef_IsNull(res), error);
+            ERROR_IF(res_o == NULL, error);
+            res = PyStackRef_FromPyObjectSteal(res_o);
         }
 
         macro(CALL_TUPLE_1) =
@@ -3701,10 +3703,10 @@ dummy_func(
             DEOPT_IF(!PyStackRef_IsNull(null[0]));
             DEOPT_IF(!PyType_Check(callable_o));
             PyTypeObject *tp = (PyTypeObject *)callable_o;
-            DEOPT_IF(tp->tp_version_tag != type_version);
+            DEOPT_IF(FT_ATOMIC_LOAD_UINT32_RELAXED(tp->tp_version_tag) != type_version);
             assert(tp->tp_flags & Py_TPFLAGS_INLINE_VALUES);
             PyHeapTypeObject *cls = (PyHeapTypeObject *)callable_o;
-            PyFunctionObject *init_func = (PyFunctionObject *)cls->_spec_cache.init;
+            PyFunctionObject *init_func = (PyFunctionObject *)FT_ATOMIC_LOAD_PTR_RELAXED(cls->_spec_cache.init);
             PyCodeObject *code = (PyCodeObject *)init_func->func_code;
             DEOPT_IF(!_PyThreadState_HasStackSpace(tstate, code->co_framesize + _Py_InitCleanup.co_framesize));
             STAT_INC(CALL, hit);
@@ -3980,7 +3982,12 @@ dummy_func(
             assert(self_o != NULL);
             DEOPT_IF(!PyList_Check(self_o));
             STAT_INC(CALL, hit);
+        #ifdef Py_GIL_DISABLED
+            int err;
+            err = _PyList_AppendTakeRefAndLock((PyListObject *)self_o, PyStackRef_AsPyObjectSteal(arg));
+        #else
             int err = _PyList_AppendTakeRef((PyListObject *)self_o, PyStackRef_AsPyObjectSteal(arg));
+        #endif
             PyStackRef_CLOSE(self);
             PyStackRef_CLOSE(callable);
             ERROR_IF(err, error);

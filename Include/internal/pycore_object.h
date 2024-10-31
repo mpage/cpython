@@ -775,6 +775,10 @@ extern int _PyObject_StoreInstanceAttribute(PyObject *obj,
                                             PyObject *name, PyObject *value);
 extern bool _PyObject_TryGetInstanceAttribute(PyObject *obj, PyObject *name,
                                               PyObject **attr);
+extern PyObject *_PyType_LookupRefAndVersion(PyTypeObject *, PyObject *,
+                                             unsigned int *);
+extern int _PyType_CacheInitForSpecialization(PyTypeObject *, PyObject *,
+                                              unsigned int);
 
 #ifdef Py_GIL_DISABLED
 #  define MANAGED_DICT_OFFSET    (((Py_ssize_t)sizeof(PyObject *))*-1)

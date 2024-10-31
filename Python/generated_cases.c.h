@@ -872,7 +872,7 @@
                 callable = &stack_pointer[-2 - oparg];
                 uint16_t counter = read_u16(&this_instr[1].cache);
                 (void)counter;
-                #if ENABLE_SPECIALIZATION
+                #if ENABLE_SPECIALIZATION_FT
                 if (ADAPTIVE_COUNTER_TRIGGERS(counter)) {
                     next_instr = this_instr;
                     _PyFrame_SetStackPointer(frame, stack_pointer);
@@ -882,7 +882,7 @@
                 }
                 OPCODE_DEFERRED_INC(CALL);
                 ADVANCE_ADAPTIVE_COUNTER(this_instr[1].counter);
-                #endif  /* ENABLE_SPECIALIZATION */
+                #endif  /* ENABLE_SPECIALIZATION_FT */
             }
             /* Skip 2 cache entries */
             // _MAYBE_EXPAND_METHOD
@@ -1040,10 +1040,10 @@
                 DEOPT_IF(!PyStackRef_IsNull(null[0]), CALL);
                 DEOPT_IF(!PyType_Check(callable_o), CALL);
                 PyTypeObject *tp = (PyTypeObject *)callable_o;
-                DEOPT_IF(tp->tp_version_tag != type_version, CALL);
+                DEOPT_IF(FT_ATOMIC_LOAD_UINT32_RELAXED(tp->tp_version_tag) != type_version, CALL);
                 assert(tp->tp_flags & Py_TPFLAGS_INLINE_VALUES);
                 PyHeapTypeObject *cls = (PyHeapTypeObject *)callable_o;
-                PyFunctionObject *init_func = (PyFunctionObject *)cls->_spec_cache.init;
+                PyFunctionObject *init_func = (PyFunctionObject *)FT_ATOMIC_LOAD_PTR_RELAXED(cls->_spec_cache.init);
                 PyCodeObject *code = (PyCodeObject *)init_func->func_code;
                 DEOPT_IF(!_PyThreadState_HasStackSpace(tstate, code->co_framesize + _Py_InitCleanup.co_framesize), CALL);
                 STAT_INC(CALL, hit);
@@ -2376,7 +2376,14 @@
             assert(self_o != NULL);
             DEOPT_IF(!PyList_Check(self_o), CALL);
             STAT_INC(CALL, hit);
+            #ifdef Py_GIL_DISABLED
+            int err;
+            _PyFrame_SetStackPointer(frame, stack_pointer);
+            err = _PyList_AppendTakeRefAndLock((PyListObject *)self_o, PyStackRef_AsPyObjectSteal(arg));
+            stack_pointer = _PyFrame_GetStackPointer(frame);
+            #else
             int err = _PyList_AppendTakeRef((PyListObject *)self_o, PyStackRef_AsPyObjectSteal(arg));
+            #endif
             PyStackRef_CLOSE(self);
             PyStackRef_CLOSE(callable);
             if (err) goto pop_3_error;
@@ -2976,10 +2983,11 @@
                 DEOPT_IF(callable_o != (PyObject *)&PyUnicode_Type, CALL);
                 STAT_INC(CALL, hit);
                 _PyFrame_SetStackPointer(frame, stack_pointer);
-                res = PyStackRef_FromPyObjectSteal(PyObject_Str(arg_o));
+                PyObject *res_o = PyObject_Str(arg_o);
                 stack_pointer = _PyFrame_GetStackPointer(frame);
                 PyStackRef_CLOSE(arg);
-                if (PyStackRef_IsNull(res)) goto pop_3_error;
+                if (res_o == NULL) goto pop_3_error;
+                res = PyStackRef_FromPyObjectSteal(res_o);
             }
             // _CHECK_PERIODIC
             {
@@ -3026,10 +3034,11 @@
                 DEOPT_IF(callable_o != (PyObject *)&PyTuple_Type, CALL);
                 STAT_INC(CALL, hit);
                 _PyFrame_SetStackPointer(frame, stack_pointer);
-                res = PyStackRef_FromPyObjectSteal(PySequence_Tuple(arg_o));
+                PyObject *res_o = PySequence_Tuple(arg_o);
                 stack_pointer = _PyFrame_GetStackPointer(frame);
                 PyStackRef_CLOSE(arg);
-                if (PyStackRef_IsNull(res)) goto pop_3_error;
+                if (res_o == NULL) goto pop_3_error;
+                res = PyStackRef_FromPyObjectSteal(res_o);
             }
             // _CHECK_PERIODIC
             {

@@ -603,6 +603,7 @@ _PyCode_DisableSpecialization(_Py_CODEUNIT *instructions, Py_ssize_t size)
 #define SPEC_FAIL_CALL_INIT_NOT_SIMPLE 30
 #define SPEC_FAIL_CALL_METACLASS 31
 #define SPEC_FAIL_CALL_INIT_NOT_INLINE_VALUES 32
+#define SPEC_FAIL_CALL_NO_TYPE_VERSION 33
 
 /* COMPARE_OP */
 #define SPEC_FAIL_COMPARE_OP_DIFFERENT_TYPES 12
@@ -1921,41 +1922,41 @@ success:
     cache->counter = adaptive_counter_cooldown();
 }
 
-/* Returns a borrowed reference.
- * The reference is only valid if guarded by a type version check.
- */
-static PyFunctionObject *
-get_init_for_simple_managed_python_class(PyTypeObject *tp)
+/* Returns a strong reference. */
+static PyObject *
+get_init_for_simple_managed_python_class(PyTypeObject *tp, unsigned int *tp_version)
 {
     assert(tp->tp_new == PyBaseObject_Type.tp_new);
     if (tp->tp_alloc != PyType_GenericAlloc) {
         SPECIALIZATION_FAIL(CALL, SPEC_FAIL_OVERRIDDEN);
         return NULL;
     }
-    if ((tp->tp_flags & Py_TPFLAGS_INLINE_VALUES) == 0) {
+    unsigned long tp_flags = PyType_GetFlags(tp);
+    if ((tp_flags & Py_TPFLAGS_INLINE_VALUES) == 0) {
         SPECIALIZATION_FAIL(CALL, SPEC_FAIL_CALL_INIT_NOT_INLINE_VALUES);
         return NULL;
     }
-    if (!(tp->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
+    if (!(tp_flags & Py_TPFLAGS_HEAPTYPE)) {
         /* Is this possible? */
         SPECIALIZATION_FAIL(CALL, SPEC_FAIL_EXPECTED_ERROR);
         return NULL;
     }
-    PyObject *init = _PyType_Lookup(tp, &_Py_ID(__init__));
+    PyObject *init = _PyType_LookupRefAndVersion(tp, &_Py_ID(__init__), tp_version);
     if (init == NULL || !PyFunction_Check(init)) {
         SPECIALIZATION_FAIL(CALL, SPEC_FAIL_CALL_INIT_NOT_PYTHON);
+        Py_XDECREF(init);
         return NULL;
     }
     int kind = function_kind((PyCodeObject *)PyFunction_GET_CODE(init));
     if (kind != SIMPLE_FUNCTION) {
         SPECIALIZATION_FAIL(CALL, SPEC_FAIL_CALL_INIT_NOT_SIMPLE);
+        Py_DECREF(init);
         return NULL;
     }
-    ((PyHeapTypeObject *)tp)->_spec_cache.init = init;
-    return (PyFunctionObject *)init;
+    return init;
 }
 
-static int
+static void
 specialize_class_call(PyObject *callable, _Py_CODEUNIT *instr, int nargs)
 {
     assert(PyType_Check(callable));
@@ -1964,21 +1965,21 @@ specialize_class_call(PyObject *callable, _Py_CODEUNIT *instr, int nargs)
         int oparg = instr->op.arg;
         if (nargs == 1 && oparg == 1) {
             if (tp == &PyUnicode_Type) {
-                instr->op.code = CALL_STR_1;
-                return 0;
+                specialize(instr, CALL_STR_1, NULL);
+                return;
             }
             else if (tp == &PyType_Type) {
-                instr->op.code = CALL_TYPE_1;
-                return 0;
+                specialize(instr, CALL_TYPE_1, NULL);
+                return;
             }
             else if (tp == &PyTuple_Type) {
-                instr->op.code = CALL_TUPLE_1;
-                return 0;
+                specialize(instr, CALL_TUPLE_1, NULL);
+                return;
             }
         }
         if (tp->tp_vectorcall != NULL) {
-            instr->op.code = CALL_BUILTIN_CLASS;
-            return 0;
+            specialize(instr, CALL_BUILTIN_CLASS, NULL);
+            return;
         }
         goto generic;
     }
@@ -1986,23 +1987,27 @@ specialize_class_call(PyObject *callable, _Py_CODEUNIT *instr, int nargs)
         goto generic;
     }
     if (tp->tp_new == PyBaseObject_Type.tp_new) {
-        PyFunctionObject *init = get_init_for_simple_managed_python_class(tp);
-        if (type_get_version(tp, CALL) == 0) {
-            return -1;
+        unsigned int tp_version = 0;
+        PyObject *init = get_init_for_simple_managed_python_class(tp, &tp_version);
+        if (!tp_version) {
+            unspecialize(instr, SPEC_FAIL_OUT_OF_VERSIONS);
+            Py_XDECREF(init);
+            return;
         }
-        if (init != NULL) {
-            _PyCallCache *cache = (_PyCallCache *)(instr + 1);
-            write_u32(cache->func_version, tp->tp_version_tag);
-            _Py_SET_OPCODE(*instr, CALL_ALLOC_AND_ENTER_INIT);
-            return 0;
+        if (init != NULL && _PyType_CacheInitForSpecialization(tp, init, tp_version)) {
+            _PyCallCache cache;
+            write_u32(cache.func_version, tp_version);
+            specialize(instr, CALL_ALLOC_AND_ENTER_INIT, &cache);
+            Py_DECREF(init);
+            return;
         }
+        Py_XDECREF(init);
     }
 generic:
-    instr->op.code = CALL_NON_PY_GENERAL;
-    return 0;
+    specialize(instr, CALL_NON_PY_GENERAL, NULL);
 }
 
-static int
+static void
 specialize_method_descriptor(PyMethodDescrObject *descr, _Py_CODEUNIT *instr,
                              int nargs)
 {
@@ -2011,16 +2016,16 @@ specialize_method_descriptor(PyMethodDescrObject *descr, _Py_CODEUNIT *instr,
         METH_KEYWORDS | METH_METHOD)) {
         case METH_NOARGS: {
             if (nargs != 1) {
-                SPECIALIZATION_FAIL(CALL, SPEC_FAIL_WRONG_NUMBER_ARGUMENTS);
-                return -1;
+                unspecialize(instr, SPEC_FAIL_WRONG_NUMBER_ARGUMENTS);
+                return;
             }
-            instr->op.code = CALL_METHOD_DESCRIPTOR_NOARGS;
-            return 0;
+            specialize(instr, CALL_METHOD_DESCRIPTOR_NOARGS, NULL);
+            return;
         }
         case METH_O: {
             if (nargs != 2) {
-                SPECIALIZATION_FAIL(CALL, SPEC_FAIL_WRONG_NUMBER_ARGUMENTS);
-                return -1;
+                unspecialize(instr, SPEC_FAIL_WRONG_NUMBER_ARGUMENTS);
+                return;
             }
             PyInterpreterState *interp = _PyInterpreterState_GET();
             PyObject *list_append = interp->callable_cache.list_append;
@@ -2028,60 +2033,60 @@ specialize_method_descriptor(PyMethodDescrObject *descr, _Py_CODEUNIT *instr,
             bool pop = (next.op.code == POP_TOP);
             int oparg = instr->op.arg;
             if ((PyObject *)descr == list_append && oparg == 1 && pop) {
-                instr->op.code = CALL_LIST_APPEND;
-                return 0;
+                specialize(instr, CALL_LIST_APPEND, NULL);
+                return;
             }
-            instr->op.code = CALL_METHOD_DESCRIPTOR_O;
-            return 0;
+            specialize(instr, CALL_METHOD_DESCRIPTOR_O, NULL);
+            return;
         }
         case METH_FASTCALL: {
-            instr->op.code = CALL_METHOD_DESCRIPTOR_FAST;
-            return 0;
+            specialize(instr, CALL_METHOD_DESCRIPTOR_FAST, NULL);
+            return;
         }
         case METH_FASTCALL | METH_KEYWORDS: {
-            instr->op.code = CALL_METHOD_DESCRIPTOR_FAST_WITH_KEYWORDS;
-            return 0;
+            specialize(instr, CALL_METHOD_DESCRIPTOR_FAST_WITH_KEYWORDS, NULL);
+            return;
         }
     }
-    instr->op.code = CALL_NON_PY_GENERAL;
-    return 0;
+    specialize(instr, CALL_NON_PY_GENERAL, NULL);
 }
 
-static int
+static void
 specialize_py_call(PyFunctionObject *func, _Py_CODEUNIT *instr, int nargs,
                    bool bound_method)
 {
-    _PyCallCache *cache = (_PyCallCache *)(instr + 1);
     PyCodeObject *code = (PyCodeObject *)func->func_code;
     int kind = function_kind(code);
     /* Don't specialize if PEP 523 is active */
     if (_PyInterpreterState_GET()->eval_frame) {
-        SPECIALIZATION_FAIL(CALL, SPEC_FAIL_CALL_PEP_523);
-        return -1;
+        unspecialize(instr, SPEC_FAIL_CALL_PEP_523);
+        return;
     }
     int argcount = -1;
     if (kind == SPEC_FAIL_CODE_NOT_OPTIMIZED) {
-        SPECIALIZATION_FAIL(CALL, SPEC_FAIL_CODE_NOT_OPTIMIZED);
-        return -1;
+        unspecialize(instr, SPEC_FAIL_CODE_NOT_OPTIMIZED);
+        return;
     }
     if (kind == SIMPLE_FUNCTION) {
         argcount = code->co_argcount;
     }
     int version = _PyFunction_GetVersionForCurrentState(func);
     if (!_PyFunction_IsVersionValid(version)) {
-        SPECIALIZATION_FAIL(CALL, SPEC_FAIL_OUT_OF_VERSIONS);
-        return -1;
+        unspecialize(instr, SPEC_FAIL_OUT_OF_VERSIONS);
+        return;
     }
-    write_u32(cache->func_version, version);
+    _PyCallCache cache;
+    write_u32(cache.func_version, version);
+    uint8_t opcode;
     if (argcount == nargs + bound_method) {
-        instr->op.code = bound_method ? CALL_BOUND_METHOD_EXACT_ARGS : CALL_PY_EXACT_ARGS;
+        opcode =
+            bound_method ? CALL_BOUND_METHOD_EXACT_ARGS : CALL_PY_EXACT_ARGS;
     }
     else {
-        instr->op.code = bound_method ? CALL_BOUND_METHOD_GENERAL : CALL_PY_GENERAL;
+        opcode = bound_method ? CALL_BOUND_METHOD_GENERAL : CALL_PY_GENERAL;
     }
-    return 0;
+    specialize(instr, opcode, &cache);
 }
-
 
 static int
 specialize_py_call_kw(PyFunctionObject *func, _Py_CODEUNIT *instr, int nargs,
@@ -2109,49 +2114,49 @@ specialize_py_call_kw(PyFunctionObject *func, _Py_CODEUNIT *instr, int nargs,
     return 0;
 }
 
-static int
+static void
 specialize_c_call(PyObject *callable, _Py_CODEUNIT *instr, int nargs)
 {
     if (PyCFunction_GET_FUNCTION(callable) == NULL) {
-        SPECIALIZATION_FAIL(CALL, SPEC_FAIL_OTHER);
-        return 1;
+        unspecialize(instr, SPEC_FAIL_OTHER);
+        return;
     }
     switch (PyCFunction_GET_FLAGS(callable) &
         (METH_VARARGS | METH_FASTCALL | METH_NOARGS | METH_O |
         METH_KEYWORDS | METH_METHOD)) {
         case METH_O: {
             if (nargs != 1) {
-                SPECIALIZATION_FAIL(CALL, SPEC_FAIL_WRONG_NUMBER_ARGUMENTS);
-                return 1;
+                unspecialize(instr, SPEC_FAIL_WRONG_NUMBER_ARGUMENTS);
+                return;
             }
             /* len(o) */
             PyInterpreterState *interp = _PyInterpreterState_GET();
             if (callable == interp->callable_cache.len) {
-                instr->op.code = CALL_LEN;
-                return 0;
+                specialize(instr, CALL_LEN, NULL);
+                return;
             }
-            instr->op.code = CALL_BUILTIN_O;
-            return 0;
+            specialize(instr, CALL_BUILTIN_O, NULL);
+            return;
         }
         case METH_FASTCALL: {
             if (nargs == 2) {
                 /* isinstance(o1, o2) */
                 PyInterpreterState *interp = _PyInterpreterState_GET();
                 if (callable == interp->callable_cache.isinstance) {
-                    instr->op.code = CALL_ISINSTANCE;
-                    return 0;
+                    specialize(instr, CALL_ISINSTANCE, NULL);
+                    return;
                 }
             }
-            instr->op.code = CALL_BUILTIN_FAST;
-            return 0;
+            specialize(instr, CALL_BUILTIN_FAST, NULL);
+            return;
         }
         case METH_FASTCALL | METH_KEYWORDS: {
-            instr->op.code = CALL_BUILTIN_FAST_WITH_KEYWORDS;
-            return 0;
+            specialize(instr, CALL_BUILTIN_FAST_WITH_KEYWORDS, NULL);
+            return;
         }
         default:
-            instr->op.code = CALL_NON_PY_GENERAL;
-            return 0;
+            specialize(instr, CALL_NON_PY_GENERAL, NULL);
+            return;
     }
 }
 
@@ -2160,47 +2165,32 @@ _Py_Specialize_Call(_PyStackRef callable_st, _Py_CODEUNIT *instr, int nargs)
 {
     PyObject *callable = PyStackRef_AsPyObjectBorrow(callable_st);
 
-    assert(ENABLE_SPECIALIZATION);
+    assert(ENABLE_SPECIALIZATION_FT);
     assert(_PyOpcode_Caches[CALL] == INLINE_CACHE_ENTRIES_CALL);
     assert(_Py_OPCODE(*instr) != INSTRUMENTED_CALL);
-    _PyCallCache *cache = (_PyCallCache *)(instr + 1);
-    int fail;
     if (PyCFunction_CheckExact(callable)) {
-        fail = specialize_c_call(callable, instr, nargs);
+        specialize_c_call(callable, instr, nargs);
     }
     else if (PyFunction_Check(callable)) {
-        fail = specialize_py_call((PyFunctionObject *)callable, instr, nargs, false);
+        specialize_py_call((PyFunctionObject *)callable, instr, nargs, false);
     }
     else if (PyType_Check(callable)) {
-        fail = specialize_class_call(callable, instr, nargs);
+        specialize_class_call(callable, instr, nargs);
     }
     else if (Py_IS_TYPE(callable, &PyMethodDescr_Type)) {
-        fail = specialize_method_descriptor((PyMethodDescrObject *)callable, instr, nargs);
+        specialize_method_descriptor((PyMethodDescrObject *)callable, instr, nargs);
     }
     else if (PyMethod_Check(callable)) {
         PyObject *func = ((PyMethodObject *)callable)->im_func;
         if (PyFunction_Check(func)) {
-            fail = specialize_py_call((PyFunctionObject *)func, instr, nargs, true);
+            specialize_py_call((PyFunctionObject *)func, instr, nargs, true);
         }
         else {
-            SPECIALIZATION_FAIL(CALL, SPEC_FAIL_CALL_BOUND_METHOD);
-            fail = -1;
+            unspecialize(instr, SPEC_FAIL_CALL_BOUND_METHOD);
         }
     }
     else {
-        instr->op.code = CALL_NON_PY_GENERAL;
-        fail = 0;
-    }
-    if (fail) {
-        STAT_INC(CALL, failure);
-        assert(!PyErr_Occurred());
-        instr->op.code = CALL;
-        cache->counter = adaptive_counter_backoff(cache->counter);
-    }
-    else {
-        STAT_INC(CALL, success);
-        assert(!PyErr_Occurred());
-        cache->counter = adaptive_counter_cooldown();
+        specialize(instr, CALL_NON_PY_GENERAL, NULL);
     }
 }
 
@@ -2822,6 +2812,13 @@ static const PyBytesObject no_location = {
     .ob_sval = { NO_LOC_4 }
 };
 
+#ifdef Py_GIL_DISABLED
+static _PyCodeArray init_cleanup_tlbc = {
+    .size = 1,
+    .entries = {(char*) &_Py_InitCleanup.co_code_adaptive},
+};
+#endif
+
 const struct _PyCode8 _Py_InitCleanup = {
     _PyVarObject_HEAD_INIT(&PyCode_Type, 3),
     .co_consts = (PyObject *)&_Py_SINGLETON(tuple_empty),
@@ -2837,6 +2834,9 @@ const struct _PyCode8 _Py_InitCleanup = {
     ._co_firsttraceable = 4,
     .co_stacksize = 2,
     .co_framesize = 2 + FRAME_SPECIALS_SIZE,
+#ifdef Py_GIL_DISABLED
+    .co_tlbc = &init_cleanup_tlbc,
+#endif
     .co_code_adaptive = {
         EXIT_INIT_CHECK, 0,
         RETURN_VALUE, 0,

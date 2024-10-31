@@ -4331,10 +4331,11 @@
             }
             STAT_INC(CALL, hit);
             _PyFrame_SetStackPointer(frame, stack_pointer);
-            res = PyStackRef_FromPyObjectSteal(PyObject_Str(arg_o));
+            PyObject *res_o = PyObject_Str(arg_o);
             stack_pointer = _PyFrame_GetStackPointer(frame);
             PyStackRef_CLOSE(arg);
-            if (PyStackRef_IsNull(res)) JUMP_TO_ERROR();
+            if (res_o == NULL) JUMP_TO_ERROR();
+            res = PyStackRef_FromPyObjectSteal(res_o);
             stack_pointer[-3] = res;
             stack_pointer += -2;
             assert(WITHIN_STACK_BOUNDS());
@@ -4363,10 +4364,11 @@
             }
             STAT_INC(CALL, hit);
             _PyFrame_SetStackPointer(frame, stack_pointer);
-            res = PyStackRef_FromPyObjectSteal(PySequence_Tuple(arg_o));
+            PyObject *res_o = PySequence_Tuple(arg_o);
             stack_pointer = _PyFrame_GetStackPointer(frame);
             PyStackRef_CLOSE(arg);
-            if (PyStackRef_IsNull(res)) JUMP_TO_ERROR();
+            if (res_o == NULL) JUMP_TO_ERROR();
+            res = PyStackRef_FromPyObjectSteal(res_o);
             stack_pointer[-3] = res;
             stack_pointer += -2;
             assert(WITHIN_STACK_BOUNDS());
@@ -4396,13 +4398,13 @@
                 JUMP_TO_JUMP_TARGET();
             }
             PyTypeObject *tp = (PyTypeObject *)callable_o;
-            if (tp->tp_version_tag != type_version) {
+            if (FT_ATOMIC_LOAD_UINT32_RELAXED(tp->tp_version_tag) != type_version) {
                 UOP_STAT_INC(uopcode, miss);
                 JUMP_TO_JUMP_TARGET();
             }
             assert(tp->tp_flags & Py_TPFLAGS_INLINE_VALUES);
             PyHeapTypeObject *cls = (PyHeapTypeObject *)callable_o;
-            PyFunctionObject *init_func = (PyFunctionObject *)cls->_spec_cache.init;
+            PyFunctionObject *init_func = (PyFunctionObject *)FT_ATOMIC_LOAD_PTR_RELAXED(cls->_spec_cache.init);
             PyCodeObject *code = (PyCodeObject *)init_func->func_code;
             if (!_PyThreadState_HasStackSpace(tstate, code->co_framesize + _Py_InitCleanup.co_framesize)) {
                 UOP_STAT_INC(uopcode, miss);
@@ -4805,7 +4807,14 @@
                 JUMP_TO_JUMP_TARGET();
             }
             STAT_INC(CALL, hit);
+            #ifdef Py_GIL_DISABLED
+            int err;
+            _PyFrame_SetStackPointer(frame, stack_pointer);
+            err = _PyList_AppendTakeRefAndLock((PyListObject *)self_o, PyStackRef_AsPyObjectSteal(arg));
+            stack_pointer = _PyFrame_GetStackPointer(frame);
+            #else
             int err = _PyList_AppendTakeRef((PyListObject *)self_o, PyStackRef_AsPyObjectSteal(arg));
+            #endif
             PyStackRef_CLOSE(self);
             PyStackRef_CLOSE(callable);
             if (err) JUMP_TO_ERROR();
