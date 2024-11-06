@@ -29,9 +29,9 @@ skip_if_different_mount_drives()
 
 test_tools.skip_if_missing("cases_generator")
 with test_tools.imports_under_tool("cases_generator"):
-    from analyzer import StackItem
+    from analyzer import analyze_forest, StackItem
     import parser
-    from stack import Local, Stack
+    from stack import get_stack_hwm, Local, Stack
     import tier1_generator
     import optimizer_generator
 
@@ -41,6 +41,14 @@ def handle_stderr():
         return contextlib.nullcontext()
     else:
         return support.captured_stderr()
+
+
+def parse_src(src):
+    p = parser.Parser(src, "test.c")
+    nodes = []
+    while node := p.definition():
+        nodes.append(node)
+    return nodes
 
 
 class TestEffects(unittest.TestCase):
@@ -63,6 +71,25 @@ class TestEffects(unittest.TestCase):
             stack.push(Local.undefined(out))
         self.assertEqual(stack.base_offset.to_c(), "-1 - oparg - oparg*2")
         self.assertEqual(stack.top_offset.to_c(), "1 - oparg - oparg*2 + oparg*4")
+
+    def test_hwm(self):
+        src = """
+        op(OP0, (a -- b, c)) {
+            SPAM();
+        }
+
+        op(OP1, (b, c -- x)) {
+            SPAM();
+        }
+
+        op(OP2, (x -- y if (oparg))) {
+            SPAM();
+        }
+
+        macro(OP) = OP0 + OP1 + OP2;
+        """
+        analysis = analyze_forest(parse_src(src))
+        print(get_stack_hwm(analysis.instructions["OP"]).as_comment())
 
 
 class TestGeneratedCases(unittest.TestCase):

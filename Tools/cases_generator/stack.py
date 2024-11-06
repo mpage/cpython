@@ -1,5 +1,6 @@
 import re
 from analyzer import StackItem, StackEffect, Instruction, Uop, PseudoInstruction
+from collections import defaultdict
 from dataclasses import dataclass
 from cwriter import CWriter
 from typing import Iterator
@@ -384,20 +385,23 @@ class Stack:
             self_var.in_memory = self_var.in_memory and other_var.in_memory
         self.align(other, out)
 
+    def __len__(self) -> int:
+        return len(self.variables)
+
+
+def _stacks(inst: Instruction | PseudoInstruction) -> Iterator[StackEffect]:
+    if isinstance(inst, Instruction):
+        for uop in inst.parts:
+            if isinstance(uop, Uop):
+                yield uop.stack
+    else:
+        assert isinstance(inst, PseudoInstruction)
+        yield inst.stack
+
 
 def get_stack_effect(inst: Instruction | PseudoInstruction) -> Stack:
     stack = Stack()
-
-    def stacks(inst: Instruction | PseudoInstruction) -> Iterator[StackEffect]:
-        if isinstance(inst, Instruction):
-            for uop in inst.parts:
-                if isinstance(uop, Uop):
-                    yield uop.stack
-        else:
-            assert isinstance(inst, PseudoInstruction)
-            yield inst.stack
-
-    for s in stacks(inst):
+    for s in _stacks(inst):
         locals: dict[str, Local] = {}
         for var in reversed(s.inputs):
             _, local = stack.pop(var)
@@ -410,6 +414,71 @@ def get_stack_effect(inst: Instruction | PseudoInstruction) -> Stack:
                 local = Local.unused(var)
             stack.push(local)
     return stack
+
+
+def _get_stack_parts(stack: Stack) -> Tuple[int, Dict[str, int]]:
+    uncond_depth = 0
+    cond_depths = {}
+
+def _get_deeper_stack(a: Stack, b: Stack) -> Stack:
+    if len(stack) < len(hwm):
+        raise StackError("Stack too small")
+    stack_conds = set()
+    for var in stack.variables:
+        if var.item.condition:
+            print(f"stack: {var.item.name}")
+            stack_conds.add(var.item.condition)
+    hwm_conds = set()
+    for var in hwm.variables:
+        if var.item.condition:
+            print(f"hwm: {var.item.name}")
+            hwm_conds.add(var.item.condition)
+    if stack_conds != hwm_conds:
+        raise StackError(f"XXX - Better Exception - Conds mismatch: {stack_conds} {hwm_conds}")
+
+
+def get_stack_hwm(inst: Instruction | PseudoInstruction) -> Stack:
+    stack = Stack()
+    hwm = stack.copy()
+    for s in _stacks(inst):
+        locals: dict[str, Local] = {}
+        for var in reversed(s.inputs):
+            _, local = stack.pop(var)
+            if var.name != "unused":
+                locals[local.name] = local
+        for var in s.outputs:
+            if var.name in locals:
+                local = locals[var.name]
+            else:
+                local = Local.unused(var)
+            stack.push(local)
+        hwm = _get_deeper_stack(hwm, stack)
+    return hwm
+
+
+# HWM
+#
+# - Must "contain" current stack:
+# -- Unconditional portion larger than current stack
+# -- Unconditional + conditional larger than current stack and conditional part of
+#    HWM matches conditional part of current stack and is equal or deeper
+# - New HWM: current stack contains HWM
+#
+# Ok to be conservative
+# When is one stack deeper than another?
+#
+# - Unconditional part is >=
+# - Conditional part is >=
+# -- Conditions same
+# -- Counts >=
+#
+# How to compute HWM for instruction:
+#
+# foreach uop:
+# if stack is deeper than hwm:
+#   update hwm
+# else
+#   check hwm deeper than stack
 
 @dataclass
 class Storage:
