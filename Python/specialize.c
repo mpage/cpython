@@ -2760,7 +2760,6 @@ success:
     cache->counter = adaptive_counter_cooldown();
 }
 
-#ifdef Py_STATS
 static int containsop_fail_kind(PyObject *value) {
     if (PyUnicode_CheckExact(value)) {
         return SPEC_FAIL_CONTAINS_OP_STR;
@@ -2776,7 +2775,6 @@ static int containsop_fail_kind(PyObject *value) {
     }
     return SPEC_FAIL_OTHER;
 }
-#endif   // Py_STATS
 
 void
 _Py_Specialize_ContainsOp(_PyStackRef value_st, _Py_CODEUNIT *instr)
@@ -2785,26 +2783,16 @@ _Py_Specialize_ContainsOp(_PyStackRef value_st, _Py_CODEUNIT *instr)
 
     assert(ENABLE_SPECIALIZATION_FT);
     assert(_PyOpcode_Caches[CONTAINS_OP] == INLINE_CACHE_ENTRIES_COMPARE_OP);
-    uint8_t specialized_op;
-    _PyContainsOpCache *cache = (_PyContainsOpCache  *)(instr + 1);
     if (PyDict_CheckExact(value)) {
-        specialized_op = CONTAINS_OP_DICT;
-        goto success;
+        specialize(instr, CONTAINS_OP_DICT);
+        return;
     }
     if (PySet_CheckExact(value) || PyFrozenSet_CheckExact(value)) {
-        specialized_op = CONTAINS_OP_SET;
-        goto success;
+        specialize(instr, CONTAINS_OP_SET);
+        return;
     }
 
-    SPECIALIZATION_FAIL(CONTAINS_OP, containsop_fail_kind(value));
-    STAT_INC(CONTAINS_OP, failure);
-    SET_OPCODE_OR_RETURN(instr, CONTAINS_OP);
-    cache->counter = adaptive_counter_backoff(cache->counter);
-    return;
-success:
-    STAT_INC(CONTAINS_OP, success);
-    SET_OPCODE_OR_RETURN(instr, specialized_op);
-    cache->counter = adaptive_counter_cooldown();
+    unspecialize(instr, containsop_fail_kind(value));
 }
 
 /* Code init cleanup.
