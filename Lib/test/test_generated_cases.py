@@ -31,7 +31,7 @@ test_tools.skip_if_missing("cases_generator")
 with test_tools.imports_under_tool("cases_generator"):
     from analyzer import analyze_forest, StackItem
     import parser
-    from stack import get_stack_hwm, Local, Stack
+    from stack import get_deeper_stack, get_stack_hwm, Local, Stack
     import tier1_generator
     import optimizer_generator
 
@@ -90,6 +90,32 @@ class TestEffects(unittest.TestCase):
         """
         analysis = analyze_forest(parse_src(src))
         print(get_stack_hwm(analysis.instructions["OP"]).as_comment())
+
+
+class TestGetDeeperStack(unittest.TestCase):
+    def make_stack(self, *items):
+        stack = Stack()
+        for item in items:
+            stack.push(Local.undefined(item))
+        return stack
+
+    def test_unconditional(self):
+        a = self.make_stack(StackItem("x", None, "", "1"))
+        b = self.make_stack()
+        self.assertIs(get_deeper_stack(a, b), a)
+        self.assertIs(get_deeper_stack(b, a), a)
+
+    def test_extra_condition(self):
+        a = self.make_stack(StackItem("x", None, "", "1"))
+        b = self.make_stack(
+            StackItem("x", None, "", "1"),
+            StackItem("y", None, "oparg", "1"))
+        get_deeper_stack(a, b)
+
+    def test_mismatched_conditions(self):
+        a = self.make_stack(StackItem("x", None, "foo", "1"))
+        b = self.make_stack(StackItem("x", None, "bar", "1"))
+        get_deeper_stack(a, b)
 
 
 class TestGeneratedCases(unittest.TestCase):

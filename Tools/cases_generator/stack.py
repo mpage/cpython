@@ -385,9 +385,6 @@ class Stack:
             self_var.in_memory = self_var.in_memory and other_var.in_memory
         self.align(other, out)
 
-    def __len__(self) -> int:
-        return len(self.variables)
-
 
 def _stacks(inst: Instruction | PseudoInstruction) -> Iterator[StackEffect]:
     if isinstance(inst, Instruction):
@@ -416,25 +413,63 @@ def get_stack_effect(inst: Instruction | PseudoInstruction) -> Stack:
     return stack
 
 
-def _get_stack_parts(stack: Stack) -> Tuple[int, Dict[str, int]]:
-    uncond_depth = 0
-    cond_depths = {}
+@dataclass
+class _StackDepthInfo:
+    # Number of unconditional items on the stack
+    uncond_size: int
 
-def _get_deeper_stack(a: Stack, b: Stack) -> Stack:
-    if len(stack) < len(hwm):
-        raise StackError("Stack too small")
-    stack_conds = set()
+    # Number of time each condition appears on the stack
+    cond_sizes: Dict[str, int]
+
+    def cond_size(self) -> int:
+        return sum(size for size in self.cond_sizes.values())
+
+    def check_cond_deeper(self, other: _StackDepthInfo) -> None:
+        # The conditional part of x is deeper than that of y iff the count of
+        # each conditional item in a is >= that of b, and b has no other
+        # conditional items.
+        for cond, count in self.cond_sizes.items():
+            other_count = other.cond_sizes.get(cond, 0)
+            if count < other_count:
+                raise StackError(
+                    f"Count mismatch for condition '{cond}'.")
+        for cond in other.cond_sizes.keys():
+            if cond not in self.cond_sizes:
+                raise StackError(
+                    f"Condition '{cond}' not present in both stacks.")
+
+
+def _analyze_stack_depth(stack: Stack) -> _StackDepthInfo:
+    uncond_size = 0
+    cond_sizes = defaultdict(int)
     for var in stack.variables:
-        if var.item.condition:
-            print(f"stack: {var.item.name}")
-            stack_conds.add(var.item.condition)
-    hwm_conds = set()
-    for var in hwm.variables:
-        if var.item.condition:
-            print(f"hwm: {var.item.name}")
-            hwm_conds.add(var.item.condition)
-    if stack_conds != hwm_conds:
-        raise StackError(f"XXX - Better Exception - Conds mismatch: {stack_conds} {hwm_conds}")
+        if cond := var.item.condition:
+            cond_sizes[cond] += 1
+        else:
+            uncond_size += 1
+    return _StackDepthInfo(uncond_size, cond_sizes)
+
+
+def get_deeper_stack(a: Stack, b: Stack) -> Stack:
+    a_info = _analyze_stack_depth(a)
+    b_info = _analyze_stack_depth(b)
+
+    if a_info.uncond_size > b_info.uncond_size:
+        a_info.check_cond_deeper(b_info)
+        return a
+    elif b_info.uncond_size > a_info.uncond_size:
+        b_info.check_cond_deeper(a_info)
+        return b
+    else:
+        if a_info.cond_sizes == b_info.cond_sizes:
+            return a
+        elif a_info.cond_size() == 0:
+            return b
+        elif b_info.cond_size() == 0:
+            return a
+        else:
+            raise StackError(
+                "Cannot determine deeper stack: different conditional components.")
 
 
 def get_stack_hwm(inst: Instruction | PseudoInstruction) -> Stack:
@@ -452,7 +487,9 @@ def get_stack_hwm(inst: Instruction | PseudoInstruction) -> Stack:
             else:
                 local = Local.unused(var)
             stack.push(local)
-        hwm = _get_deeper_stack(hwm, stack)
+        new_hwm = _get_deeper_stack(hwm, stack)
+        if new_hwm is not hwm:
+            hwm = new_hwm.copy()
     return hwm
 
 
