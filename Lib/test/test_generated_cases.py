@@ -124,6 +124,10 @@ class TestGetDeeperStack(unittest.TestCase):
         b = self.make_stack(("x", "bar"))
         self.check_err(a, b)
 
+        a = self.make_stack(("x", ""), ("y", ""))
+        b = self.make_stack(("z", "foo"))
+        self.check_deeper(a, b, a)
+
     def test_only_conditions(self):
         a = self.make_stack(("x", "foo"))
         b = self.make_stack()

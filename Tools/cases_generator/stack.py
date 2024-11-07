@@ -415,11 +415,13 @@ def get_stack_effect(inst: Instruction | PseudoInstruction) -> Stack:
 
 @dataclass
 class ConditionSet:
+    """A multi-set of conditions"""
+
     # Number of times each condition appears on the stack
     conditions: Dict[str, int]
 
     def contains(self, other: ConditionSet) -> bool:
-        # All of our conditions must appear at least as frequently
+        # All of self's conditions must appear at least as frequently
         # as in other
         for cond, count in self.conditions.items():
             other_count = other.conditions.get(cond, 0)
@@ -430,6 +432,9 @@ class ConditionSet:
             if cond not in self.conditions:
                 return False
         return True
+
+    def total(self) -> int:
+        return sum(self.conditions.values())
 
 
 def _analyze_stack_depth(stack: Stack) -> Tuple[int, ConditionSet]:
@@ -444,15 +449,24 @@ def _analyze_stack_depth(stack: Stack) -> Tuple[int, ConditionSet]:
 
 
 def get_deeper_stack(a: Stack, b: Stack) -> Stack:
+    """Return the deeper of the two stacks or the first stack if they are the
+    same size.
+
+    Raises a StackError when we cannot statically determine which stack is
+    larger due to different conditional items.
+    """
     a_uncond_size, a_conds = _analyze_stack_depth(a)
     b_uncond_size, b_conds = _analyze_stack_depth(b)
+
     if a_uncond_size > b_uncond_size:
-        if not a_conds.contains(b_conds):
+        surplus = a_uncond_size - b_uncond_size
+        if not ((surplus >= b_conds.total()) or a_conds.contains(b_conds)):
             raise StackError(
                 "cannot determine deeper stack: different conditional components.")
         return a
     elif b_uncond_size > a_uncond_size:
-        if not b_conds.contains(a_conds):
+        surplus = b_uncond_size - a_uncond_size
+        if not ((surplus >= a_conds.total()) or b_conds.contains(a_conds)):
             raise StackError(
                 "cannot determine deeper stack: different conditional components.")
         return b
