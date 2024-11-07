@@ -31,7 +31,7 @@ test_tools.skip_if_missing("cases_generator")
 with test_tools.imports_under_tool("cases_generator"):
     from analyzer import analyze_forest, StackItem
     import parser
-    from stack import get_deeper_stack, get_stack_hwm, Local, Stack
+    from stack import get_deeper_stack, get_stack_hwm, Local, Stack, StackError
     import tier1_generator
     import optimizer_generator
 
@@ -96,26 +96,42 @@ class TestGetDeeperStack(unittest.TestCase):
     def make_stack(self, *items):
         stack = Stack()
         for item in items:
-            stack.push(Local.undefined(item))
+            stack.push(Local.undefined(StackItem(item[0], None, item[1], "1")))
         return stack
 
+    def check_deeper(self, a, b, expected):
+        self.assertIs(get_deeper_stack(a, b), expected)
+        self.assertIs(get_deeper_stack(b, a), expected)
+
+    def check_err(self, a, b):
+        with self.assertRaises(StackError):
+            get_deeper_stack(a, b)
+        with self.assertRaises(StackError):
+            get_deeper_stack(b, a)
+
     def test_unconditional(self):
-        a = self.make_stack(StackItem("x", None, "", "1"))
+        a = self.make_stack(("x", ""))
         b = self.make_stack()
-        self.assertIs(get_deeper_stack(a, b), a)
-        self.assertIs(get_deeper_stack(b, a), a)
+        self.check_deeper(a, b, a)
 
     def test_extra_condition(self):
-        a = self.make_stack(StackItem("x", None, "", "1"))
-        b = self.make_stack(
-            StackItem("x", None, "", "1"),
-            StackItem("y", None, "oparg", "1"))
-        get_deeper_stack(a, b)
+        a = self.make_stack(("x", ""))
+        b = self.make_stack(("x", ""), ("y", "oparg"))
+        self.check_deeper(a, b, b)
 
     def test_mismatched_conditions(self):
-        a = self.make_stack(StackItem("x", None, "foo", "1"))
-        b = self.make_stack(StackItem("x", None, "bar", "1"))
-        get_deeper_stack(a, b)
+        a = self.make_stack(("x", "foo"))
+        b = self.make_stack(("x", "bar"))
+        self.check_err(a, b)
+
+    def test_only_conditions(self):
+        a = self.make_stack(("x", "foo"))
+        b = self.make_stack()
+        self.check_deeper(a, b, a)
+
+        a = self.make_stack(("x", "foo"), ("y", "foo"))
+        b = self.make_stack(("x", "foo"))
+        self.check_deeper(a, b, a)
 
 
 class TestGeneratedCases(unittest.TestCase):

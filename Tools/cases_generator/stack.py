@@ -414,62 +414,56 @@ def get_stack_effect(inst: Instruction | PseudoInstruction) -> Stack:
 
 
 @dataclass
-class _StackDepthInfo:
-    # Number of unconditional items on the stack
-    uncond_size: int
+class ConditionSet:
+    # Number of times each condition appears on the stack
+    conditions: Dict[str, int]
 
-    # Number of time each condition appears on the stack
-    cond_sizes: Dict[str, int]
-
-    def cond_size(self) -> int:
-        return sum(size for size in self.cond_sizes.values())
-
-    def check_cond_deeper(self, other: _StackDepthInfo) -> None:
-        # The conditional part of x is deeper than that of y iff the count of
-        # each conditional item in a is >= that of b, and b has no other
-        # conditional items.
-        for cond, count in self.cond_sizes.items():
-            other_count = other.cond_sizes.get(cond, 0)
+    def contains(self, other: ConditionSet) -> bool:
+        # All of our conditions must appear at least as frequently
+        # as in other
+        for cond, count in self.conditions.items():
+            other_count = other.conditions.get(cond, 0)
             if count < other_count:
-                raise StackError(
-                    f"Count mismatch for condition '{cond}'.")
-        for cond in other.cond_sizes.keys():
-            if cond not in self.cond_sizes:
-                raise StackError(
-                    f"Condition '{cond}' not present in both stacks.")
+                return False
+        # No other conditions may be present in other
+        for cond in other.conditions.keys():
+            if cond not in self.conditions:
+                return False
+        return True
 
 
-def _analyze_stack_depth(stack: Stack) -> _StackDepthInfo:
+def _analyze_stack_depth(stack: Stack) -> Tuple[int, ConditionSet]:
     uncond_size = 0
-    cond_sizes = defaultdict(int)
+    conds = defaultdict(int)
     for var in stack.variables:
         if cond := var.item.condition:
-            cond_sizes[cond] += 1
+            conds[cond] += 1
         else:
             uncond_size += 1
-    return _StackDepthInfo(uncond_size, cond_sizes)
+    return uncond_size, ConditionSet(conds)
 
 
 def get_deeper_stack(a: Stack, b: Stack) -> Stack:
-    a_info = _analyze_stack_depth(a)
-    b_info = _analyze_stack_depth(b)
-
-    if a_info.uncond_size > b_info.uncond_size:
-        a_info.check_cond_deeper(b_info)
+    a_uncond_size, a_conds = _analyze_stack_depth(a)
+    b_uncond_size, b_conds = _analyze_stack_depth(b)
+    if a_uncond_size > b_uncond_size:
+        if not a_conds.contains(b_conds):
+            raise StackError(
+                "cannot determine deeper stack: different conditional components.")
         return a
-    elif b_info.uncond_size > a_info.uncond_size:
-        b_info.check_cond_deeper(a_info)
+    elif b_uncond_size > a_uncond_size:
+        if not b_conds.contains(a_conds):
+            raise StackError(
+                "cannot determine deeper stack: different conditional components.")
         return b
     else:
-        if a_info.cond_sizes == b_info.cond_sizes:
+        if a_conds.contains(b_conds):
             return a
-        elif a_info.cond_size() == 0:
+        elif b_conds.contains(a_conds):
             return b
-        elif b_info.cond_size() == 0:
-            return a
         else:
             raise StackError(
-                "Cannot determine deeper stack: different conditional components.")
+                "cannot determine deeper stack: different conditional components.")
 
 
 def get_stack_hwm(inst: Instruction | PseudoInstruction) -> Stack:
