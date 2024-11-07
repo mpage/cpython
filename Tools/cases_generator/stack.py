@@ -3,7 +3,7 @@ from analyzer import StackItem, StackEffect, Instruction, Uop, PseudoInstruction
 from collections import defaultdict
 from dataclasses import dataclass
 from cwriter import CWriter
-from typing import Iterator
+from typing import Iterator, Tuple
 
 UNUSED = {"unused"}
 
@@ -386,18 +386,18 @@ class Stack:
         self.align(other, out)
 
 
-def _stacks(inst: Instruction | PseudoInstruction) -> Iterator[StackEffect]:
-    if isinstance(inst, Instruction):
-        for uop in inst.parts:
-            if isinstance(uop, Uop):
-                yield uop.stack
-    else:
-        assert isinstance(inst, PseudoInstruction)
-        yield inst.stack
-
-
 def get_stack_effect(inst: Instruction | PseudoInstruction) -> Stack:
     stack = Stack()
+
+    def stacks(inst: Instruction | PseudoInstruction) -> Iterator[StackEffect]:
+        if isinstance(inst, Instruction):
+            for uop in inst.parts:
+                if isinstance(uop, Uop):
+                    yield uop.stack
+        else:
+            assert isinstance(inst, PseudoInstruction)
+            yield inst.stack
+
     for s in _stacks(inst):
         locals: dict[str, Local] = {}
         for var in reversed(s.inputs):
@@ -448,12 +448,12 @@ def _analyze_stack_depth(stack: Stack) -> Tuple[int, ConditionSet]:
     return uncond_size, ConditionSet(conds)
 
 
-def get_deeper_stack(a: Stack, b: Stack) -> Stack:
+def get_deeper_stack(a: Stack, b: Stack) -> Optional[Stack]:
     """Return the deeper of the two stacks or the first stack if they are the
     same size.
 
-    Raises a StackError when we cannot statically determine which stack is
-    larger due to different conditional items.
+    Returns None when we cannot statically determine which stack is
+    larger due to different conditions.
     """
     a_uncond_size, a_conds = _analyze_stack_depth(a)
     b_uncond_size, b_conds = _analyze_stack_depth(b)
@@ -461,14 +461,12 @@ def get_deeper_stack(a: Stack, b: Stack) -> Stack:
     if a_uncond_size > b_uncond_size:
         surplus = a_uncond_size - b_uncond_size
         if not ((surplus >= b_conds.total()) or a_conds.contains(b_conds)):
-            raise StackError(
-                "cannot determine deeper stack: different conditional components.")
+            return None
         return a
     elif b_uncond_size > a_uncond_size:
         surplus = b_uncond_size - a_uncond_size
         if not ((surplus >= a_conds.total()) or b_conds.contains(a_conds)):
-            raise StackError(
-                "cannot determine deeper stack: different conditional components.")
+            return None
         return b
     else:
         if a_conds.contains(b_conds):
@@ -476,14 +474,33 @@ def get_deeper_stack(a: Stack, b: Stack) -> Stack:
         elif b_conds.contains(a_conds):
             return b
         else:
-            raise StackError(
-                "cannot determine deeper stack: different conditional components.")
+            return None
 
 
 def get_stack_hwm(inst: Instruction | PseudoInstruction) -> Stack:
+    """Return the deepest stack seen across all uops of inst"""
     stack = Stack()
-    hwm = stack.copy()
-    for s in _stacks(inst):
+    hwm_name, hwm = "", stack.copy()
+
+    def stacks(inst: Instruction | PseudoInstruction) -> Iterator[Tuple[str, StackEffect]]:
+        if isinstance(inst, Instruction):
+            for uop in inst.parts:
+                if isinstance(uop, Uop):
+                    yield uop.name, uop.stack
+        else:
+            assert isinstance(inst, PseudoInstruction)
+            yield inst.name, inst.stack
+
+    def vars(stack: Stack) -> str:
+        parts = []
+        for v in stack.variables:
+            s = v.name
+            if v.condition:
+                s = f"{s} if ({v.condition})"
+            parts.append(s)
+        return ", ".join(parts)
+
+    for name, s in stacks(inst):
         locals: dict[str, Local] = {}
         for var in reversed(s.inputs):
             _, local = stack.pop(var)
@@ -495,35 +512,17 @@ def get_stack_hwm(inst: Instruction | PseudoInstruction) -> Stack:
             else:
                 local = Local.unused(var)
             stack.push(local)
-        new_hwm = _get_deeper_stack(hwm, stack)
-        if new_hwm is not hwm:
+        new_hwm = get_deeper_stack(hwm, stack)
+        if new_hwm is None:
+            raise StackError(
+                f"Cannot determine stack hwm for {inst.name}:"
+                f" current hwm at {hwm_name} ({vars(hwm)}) is incompatible"
+                f" with stack after processing {name} ({vars(stack)})")
+        elif new_hwm is not hwm:
             hwm = new_hwm.copy()
+            hwm_name = name
     return hwm
 
-
-# HWM
-#
-# - Must "contain" current stack:
-# -- Unconditional portion larger than current stack
-# -- Unconditional + conditional larger than current stack and conditional part of
-#    HWM matches conditional part of current stack and is equal or deeper
-# - New HWM: current stack contains HWM
-#
-# Ok to be conservative
-# When is one stack deeper than another?
-#
-# - Unconditional part is >=
-# - Conditional part is >=
-# -- Conditions same
-# -- Counts >=
-#
-# How to compute HWM for instruction:
-#
-# foreach uop:
-# if stack is deeper than hwm:
-#   update hwm
-# else
-#   check hwm deeper than stack
 
 @dataclass
 class Storage:

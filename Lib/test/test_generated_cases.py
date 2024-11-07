@@ -72,7 +72,63 @@ class TestEffects(unittest.TestCase):
         self.assertEqual(stack.base_offset.to_c(), "-1 - oparg - oparg*2")
         self.assertEqual(stack.top_offset.to_c(), "1 - oparg - oparg*2 + oparg*4")
 
-    def test_hwm(self):
+
+class TestGetDeeperStack(unittest.TestCase):
+    def make_stack(self, *items):
+        stack = Stack()
+        for item in items:
+            stack.push(Local.undefined(StackItem(item[0], None, item[1], "1")))
+        return stack
+
+    def check(self, a, b, expected):
+        self.assertIs(get_deeper_stack(a, b), expected)
+        self.assertIs(get_deeper_stack(b, a), expected)
+
+    def test_unconditional(self):
+        a = self.make_stack(("x", ""))
+        b = self.make_stack()
+        self.check(a, b, a)
+
+    def test_extra_condition(self):
+        a = self.make_stack(("x", ""))
+        b = self.make_stack(("x", ""), ("y", "oparg"))
+        self.check(a, b, b)
+
+    def test_mismatched_conditions(self):
+        a = self.make_stack(("x", "foo"))
+        b = self.make_stack(("x", "bar"))
+        self.check(a, b, None)
+
+        a = self.make_stack(("x", ""), ("y", ""))
+        b = self.make_stack(("z", "foo"))
+        self.check(a, b, a)
+
+    def test_only_conditions(self):
+        a = self.make_stack(("x", "foo"))
+        b = self.make_stack()
+        self.check(a, b, a)
+
+        a = self.make_stack(("x", "foo"), ("y", "foo"))
+        b = self.make_stack(("x", "foo"))
+        self.check(a, b, a)
+
+
+class TestGetHWM(unittest.TestCase):
+    def check(self, src, expected_vars):
+        analysis = analyze_forest(parse_src(src))
+        hwm = get_stack_hwm(analysis.instructions["OP"])
+        hwm_vars = [loc.item.name for loc in hwm.variables]
+        self.assertEqual(hwm_vars, expected_vars)
+
+    def test_inst(self):
+        src = """
+        inst(OP, (a -- b, c)) {
+            SPAM();
+        }
+        """
+        self.check(src, ["b", "c"])
+
+    def test_uops(self):
         src = """
         op(OP0, (a -- b, c)) {
             SPAM();
@@ -82,60 +138,33 @@ class TestEffects(unittest.TestCase):
             SPAM();
         }
 
-        op(OP2, (x -- y if (oparg))) {
+        op(OP2, (x -- x, y if (oparg))) {
             SPAM();
         }
 
         macro(OP) = OP0 + OP1 + OP2;
         """
-        analysis = analyze_forest(parse_src(src))
-        print(get_stack_hwm(analysis.instructions["OP"]).as_comment())
+        self.check(src, ["b", "c"])
 
+    def test_incompatible_stacks(self):
+        src = """
+        op(OP0, (a -- b, c if (oparg & 1))) {
+            SPAM();
+        }
 
-class TestGetDeeperStack(unittest.TestCase):
-    def make_stack(self, *items):
-        stack = Stack()
-        for item in items:
-            stack.push(Local.undefined(StackItem(item[0], None, item[1], "1")))
-        return stack
+        op(OP1, (b, c -- x)) {
+            SPAM();
+        }
 
-    def check_deeper(self, a, b, expected):
-        self.assertIs(get_deeper_stack(a, b), expected)
-        self.assertIs(get_deeper_stack(b, a), expected)
+        op(OP2, (x -- x, y if (oparg & 2))) {
+            SPAM();
+        }
 
-    def check_err(self, a, b):
-        with self.assertRaises(StackError):
-            get_deeper_stack(a, b)
-        with self.assertRaises(StackError):
-            get_deeper_stack(b, a)
-
-    def test_unconditional(self):
-        a = self.make_stack(("x", ""))
-        b = self.make_stack()
-        self.check_deeper(a, b, a)
-
-    def test_extra_condition(self):
-        a = self.make_stack(("x", ""))
-        b = self.make_stack(("x", ""), ("y", "oparg"))
-        self.check_deeper(a, b, b)
-
-    def test_mismatched_conditions(self):
-        a = self.make_stack(("x", "foo"))
-        b = self.make_stack(("x", "bar"))
-        self.check_err(a, b)
-
-        a = self.make_stack(("x", ""), ("y", ""))
-        b = self.make_stack(("z", "foo"))
-        self.check_deeper(a, b, a)
-
-    def test_only_conditions(self):
-        a = self.make_stack(("x", "foo"))
-        b = self.make_stack()
-        self.check_deeper(a, b, a)
-
-        a = self.make_stack(("x", "foo"), ("y", "foo"))
-        b = self.make_stack(("x", "foo"))
-        self.check_deeper(a, b, a)
+        macro(OP) = OP0 + OP1 + OP2;
+        """
+        with self.assertRaisesRegex(StackError,
+                                    "Cannot determine stack hwm for OP"):
+            self.check(src, [])
 
 
 class TestGeneratedCases(unittest.TestCase):
