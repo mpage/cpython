@@ -164,7 +164,7 @@ class StackOffset:
         self.pushed.sort()
         self.popped.sort()
 
-    def to_c(self) -> str:
+    def as_parts(self) -> Tuple[int, str]:
         self.simplify()
         int_offset = 0
         symbol_offset = ""
@@ -178,6 +178,10 @@ class StackOffset:
                 int_offset += int(item)
             except ValueError:
                 symbol_offset += f" + {maybe_parenthesize(item)}"
+        return int_offset, symbol_offset
+
+    def to_c(self) -> str:
+        int_offset, symbol_offset = self.as_parts()
         if symbol_offset and not int_offset:
             res = symbol_offset
         else:
@@ -398,7 +402,7 @@ def get_stack_effect(inst: Instruction | PseudoInstruction) -> Stack:
             assert isinstance(inst, PseudoInstruction)
             yield inst.stack
 
-    for s in _stacks(inst):
+    for s in stacks(inst):
         locals: dict[str, Local] = {}
         for var in reversed(s.inputs):
             _, local = stack.pop(var)
@@ -453,27 +457,28 @@ def get_deeper_stack(a: Stack, b: Stack) -> Optional[Stack]:
     same size.
 
     Returns None when we cannot statically determine which stack is
-    larger due to different conditions.
+    deeper due to different conditions for items on the stack.
     """
-    a_uncond_size, a_conds = _analyze_stack_depth(a)
-    b_uncond_size, b_conds = _analyze_stack_depth(b)
+    a_int_off, a_sym_off = a.top_offset.as_parts()
+    b_int_off, b_sym_off = b.top_offset.as_parts()
 
-    if a_uncond_size > b_uncond_size:
-        surplus = a_uncond_size - b_uncond_size
-        if not ((surplus >= b_conds.total()) or a_conds.contains(b_conds)):
+    if a_int_off > b_int_off:
+        if not a_sym_off.startswith(b_sym_off):
+            print(f"XXX a {a.top_offset.to_c()} > b {b.top_offset.to_c()} - {a_sym_off} / {b_sym_off}")
             return None
         return a
-    elif b_uncond_size > a_uncond_size:
-        surplus = b_uncond_size - a_uncond_size
-        if not ((surplus >= a_conds.total()) or b_conds.contains(a_conds)):
+    elif b_int_off > a_int_off:
+        if not b_sym_off.startswith(a_sym_off):
+            print(f"XXX b > a - {a_sym_off} / {b_sym_off}")
             return None
         return b
     else:
-        if a_conds.contains(b_conds):
+        if a_sym_off.startswith(b_sym_off):
             return a
-        elif b_conds.contains(a_conds):
+        elif b_sym_off.startswith(a_sym_off):
             return b
         else:
+            print(f"XXX == - {a_sym_off} / {b_sym_off}")
             return None
 
 
@@ -514,11 +519,16 @@ def get_stack_hwm(inst: Instruction | PseudoInstruction) -> Stack:
             stack.push(local)
         new_hwm = get_deeper_stack(hwm, stack)
         if new_hwm is None:
-            raise StackError(
-                f"Cannot determine stack hwm for {inst.name}:"
-                f" current hwm at {hwm_name} ({vars(hwm)}) is incompatible"
-                f" with stack after processing {name} ({vars(stack)})")
-        elif new_hwm is not hwm:
+            if hwm.top_offset.as_int() == 0:
+                new_hwm = stack
+            elif stack.top_offset.as_int() == 0:
+                new_hwm = hwm
+            else:
+                raise StackError(
+                    f"Cannot determine stack hwm for {inst.name}:"
+                    f" current hwm at {hwm_name} ({vars(hwm)}) is incompatible"
+                    f" with stack after processing {name} ({vars(stack)})")
+        if new_hwm is not hwm:
             hwm = new_hwm.copy()
             hwm_name = name
     return hwm

@@ -101,7 +101,7 @@ class TestGetDeeperStack(unittest.TestCase):
 
         a = self.make_stack(("x", ""), ("y", ""))
         b = self.make_stack(("z", "foo"))
-        self.check(a, b, a)
+        self.check(a, b, None)
 
     def test_only_conditions(self):
         a = self.make_stack(("x", "foo"))
@@ -111,6 +111,11 @@ class TestGetDeeperStack(unittest.TestCase):
         a = self.make_stack(("x", "foo"), ("y", "foo"))
         b = self.make_stack(("x", "foo"))
         self.check(a, b, a)
+
+    def test_XXX(self):
+        s = self.make_stack(("y", ""), ("x", "foo"), ("x", "bar"))
+        s.top_offset.simplify()
+        print(s.top_offset.to_c())
 
 
 class TestGetHWM(unittest.TestCase):

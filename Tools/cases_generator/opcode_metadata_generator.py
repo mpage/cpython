@@ -20,7 +20,7 @@ from generators_common import (
 )
 from cwriter import CWriter
 from typing import TextIO
-from stack import get_stack_effect
+from stack import get_stack_effect, get_stack_hwm, get_deeper_stack
 
 # Constants used instead of size for macro expansions.
 # Note: 1, 2, 4 must match actual cache entry sizes.
@@ -94,6 +94,8 @@ def generate_stack_effect_functions(analysis: Analysis, out: CWriter) -> None:
 
     def add(inst: Instruction | PseudoInstruction) -> None:
         stack = get_stack_effect(inst)
+        hwm = get_stack_hwm(inst)
+        print(f"{inst.name} - {hwm}")
         popped = (-stack.base_offset).to_c()
         pushed = (stack.top_offset - stack.base_offset).to_c()
         popped_data.append((inst.name, popped))
@@ -103,6 +105,25 @@ def generate_stack_effect_functions(analysis: Analysis, out: CWriter) -> None:
         add(inst)
     for pseudo in analysis.pseudos.values():
         add(pseudo)
+
+    def analyze_family(family):
+        hwm_inst = family.members[0]
+        hwm = get_stack_hwm(hwm_inst)
+        for inst in family.members[1:]:
+            inst_hwm = get_stack_hwm(inst)
+            deeper = get_deeper_stack(hwm, inst_hwm)
+            if deeper is None:
+                print(f"INCOMPATIBLE: {family.name}")
+                print(f"{inst.name} {inst_hwm.top_offset.to_c()}")
+                print(f"{hwm_inst.name} {hwm.top_offset.to_c()}")
+                return
+            elif deeper is not hwm:
+                hwm = deeper
+                hwm_inst = isnt
+        print(f"fam={name} hwm_inst={hwm_inst.name} hwm={hwm.top_offset.to_c()}")
+
+    for name, family in analysis.families.items():
+        analyze_family(family)
 
     emit_stack_effect_function(out, "popped", sorted(popped_data))
     emit_stack_effect_function(out, "pushed", sorted(pushed_data))
