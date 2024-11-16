@@ -2,8 +2,10 @@ import contextlib
 import os
 import sys
 import tempfile
+import textwrap
 import unittest
 
+from io import StringIO
 from test import support
 from test import test_tools
 
@@ -30,9 +32,11 @@ skip_if_different_mount_drives()
 test_tools.skip_if_missing("cases_generator")
 with test_tools.imports_under_tool("cases_generator"):
     from analyzer import analyze_forest, StackItem
+    from cwriter import CWriter
     import parser
     from stack import get_deeper_stack, get_stack_hwm, Local, Stack, StackError
     import tier1_generator
+    import opcode_metadata_generator
     import optimizer_generator
 
 
@@ -118,58 +122,28 @@ class TestGetDeeperStack(unittest.TestCase):
         print(s.top_offset.to_c())
 
 
-class TestGetHWM(unittest.TestCase):
-    def check(self, src, expected_vars):
-        analysis = analyze_forest(parse_src(src))
-        hwm = get_stack_hwm(analysis.instructions["OP"])
-        hwm_vars = [loc.item.name for loc in hwm.variables]
-        self.assertEqual(hwm_vars, expected_vars)
+class TestGenerateMaxStackEffect(unittest.TestCase):
+    def check(self, input, output):
+        analysis = analyze_forest(parse_src(input))
+        buf = StringIO()
+        writer = CWriter(buf, 0, False)
+        opcode_metadata_generator.generate_max_stack_effect_function(analysis, writer)
+        buf.seek(0)
+        self.assertIn(output.strip(), buf.read())
 
     def test_inst(self):
-        src = """
+        input = """
         inst(OP, (a -- b, c)) {
             SPAM();
         }
         """
-        self.check(src, ["b", "c"])
-
-    def test_uops(self):
-        src = """
-        op(OP0, (a -- b, c)) {
-            SPAM();
+        output = """
+        case OP: {
+            *effect = 1;
+            return 0;
         }
-
-        op(OP1, (b, c -- x)) {
-            SPAM();
-        }
-
-        op(OP2, (x -- x, y if (oparg))) {
-            SPAM();
-        }
-
-        macro(OP) = OP0 + OP1 + OP2;
         """
-        self.check(src, ["b", "c"])
-
-    def test_incompatible_stacks(self):
-        src = """
-        op(OP0, (a -- b, c if (oparg & 1))) {
-            SPAM();
-        }
-
-        op(OP1, (b, c -- x)) {
-            SPAM();
-        }
-
-        op(OP2, (x -- x, y if (oparg & 2))) {
-            SPAM();
-        }
-
-        macro(OP) = OP0 + OP1 + OP2;
-        """
-        with self.assertRaisesRegex(StackError,
-                                    "Cannot determine stack hwm for OP"):
-            self.check(src, [])
+        self.check(input, output)
 
 
 class TestGeneratedCases(unittest.TestCase):
