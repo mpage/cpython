@@ -140,6 +140,17 @@ _PyFunction_FromConstructor(PyFrameConstructor *constr)
     return op;
 }
 
+static int
+has_free_vars(PyCodeObject *code)
+{
+    for (int i = 0; i < code->co_nlocalsplus; i++) {
+        if (_PyLocals_GetKind(code->co_localspluskinds, i) == CO_FAST_FREE) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 PyObject *
 PyFunction_NewWithQualName(PyObject *code, PyObject *globals, PyObject *qualname)
 {
@@ -210,10 +221,10 @@ PyFunction_NewWithQualName(PyObject *code, PyObject *globals, PyObject *qualname
     op->func_typeparams = NULL;
     op->vectorcall = _PyFunction_Vectorcall;
     op->func_version = FUNC_VERSION_UNSET;
-    if ((code_obj->co_flags & CO_NESTED) == 0) {
-        // Use deferred reference counting for top-level functions, but not
-        // nested functions because they are more likely to capture variables,
-        // which makes prompt deallocation more important.
+    if (!has_free_vars(code_obj)) {
+        // Prompt deallocation is more important for functions that capture
+        // variables. Only use deferred reference counting for functions that
+        // do not capture variables, as indicated by the absense of free vars.
         _PyObject_SetDeferredRefcount((PyObject *)op);
     }
     _PyObject_GC_TRACK(op);
