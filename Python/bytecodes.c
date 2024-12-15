@@ -2924,7 +2924,7 @@ dummy_func(
         };
 
         specializing op(_SPECIALIZE_FOR_ITER, (counter/1, iter -- iter)) {
-            #if ENABLE_SPECIALIZATION
+            #if ENABLE_SPECIALIZATION_FT
             if (ADAPTIVE_COUNTER_TRIGGERS(counter)) {
                 next_instr = this_instr;
                 _Py_Specialize_ForIter(iter, next_instr, oparg);
@@ -2932,7 +2932,7 @@ dummy_func(
             }
             OPCODE_DEFERRED_INC(FOR_ITER);
             ADVANCE_ADAPTIVE_COUNTER(this_instr[1].counter);
-            #endif  /* ENABLE_SPECIALIZATION */
+            #endif  /* ENABLE_SPECIALIZATION_FT */
         }
 
         replaced op(_FOR_ITER, (iter -- iter, next)) {
