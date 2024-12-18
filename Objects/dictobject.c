@@ -7002,12 +7002,7 @@ _PyObject_TryGetInstanceAttribute(PyObject *obj, PyObject *name, PyObject **attr
 
     PyDictKeysObject *keys = CACHED_KEYS(Py_TYPE(obj));
     assert(keys != NULL);
-    Py_ssize_t ix;
-    if (keys->dk_kind == DICT_KEYS_SPLIT) {
-        ix = _PyDictKeys_StringLookupSplit(keys, name);
-    } else {
-        ix = _PyDictKeys_StringLookup(keys, name);
-    }
+    Py_ssize_t ix = _PyDictKeys_StringLookup(keys, name);
     if (ix == DKIX_EMPTY) {
         *attr = NULL;
         return true;
