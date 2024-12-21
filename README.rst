@@ -1,7 +1,7 @@
 This is Python version 3.14.0 alpha 3
 =====================================
 
-Dummy commit count: 1
+Dummy commit count: 2
 
 .. image:: https://github.com/python/cpython/actions/workflows/build.yml/badge.svg?branch=main&event=push
    :alt: CPython build status on GitHub Actions
