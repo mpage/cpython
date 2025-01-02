@@ -1176,8 +1176,7 @@ do_specialize_instance_load_attr(PyObject* owner, _Py_CODEUNIT* instr, PyObject*
             }
             #ifdef Py_GIL_DISABLED
             if (!_PyObject_HasDeferredRefcount(fget)) {
-                SPECIALIZATION_FAIL(LOAD_ATTR, SPEC_FAIL_ATTR_DESCR_NOT_DEFERRED);
-                return -1;
+                Py_INCREF(fget);
             }
             #endif
             assert(tp_version != 0);
@@ -1257,8 +1256,7 @@ do_specialize_instance_load_attr(PyObject* owner, _Py_CODEUNIT* instr, PyObject*
             }
             #ifdef Py_GIL_DISABLED
             if (!_PyObject_HasDeferredRefcount(descr)) {
-                SPECIALIZATION_FAIL(LOAD_ATTR, SPEC_FAIL_ATTR_DESCR_NOT_DEFERRED);
-                return -1;
+                Py_INCREF(descr);
             }
             #endif
             write_u32(lm_cache->keys_version, version);
@@ -1537,9 +1535,7 @@ specialize_class_load_attr(PyObject *owner, _Py_CODEUNIT *instr,
         case NON_DESCRIPTOR:
             #ifdef Py_GIL_DISABLED
             if (!_PyObject_HasDeferredRefcount(descr)) {
-                SPECIALIZATION_FAIL(LOAD_ATTR, SPEC_FAIL_ATTR_DESCR_NOT_DEFERRED);
-                Py_XDECREF(descr);
-                return -1;
+                Py_INCREF(descr);
             }
             #endif
             write_u32(cache->type_version, tp_version);
@@ -1584,8 +1580,7 @@ specialize_attr_loadclassattr(PyObject *owner, _Py_CODEUNIT *instr,
 
     #ifdef Py_GIL_DISABLED
     if (!_PyObject_HasDeferredRefcount(descr)) {
-        SPECIALIZATION_FAIL(LOAD_ATTR, SPEC_FAIL_ATTR_DESCR_NOT_DEFERRED);
-        return 0;
+        Py_INCREF(descr);
     }
     #endif
 
