@@ -356,6 +356,7 @@ extern void _Py_Specialize_ForIter(_PyStackRef iter, _Py_CODEUNIT *instr, int op
 extern void _Py_Specialize_Send(_PyStackRef receiver, _Py_CODEUNIT *instr);
 extern void _Py_Specialize_ToBool(_PyStackRef value, _Py_CODEUNIT *instr);
 extern void _Py_Specialize_ContainsOp(_PyStackRef value, _Py_CODEUNIT *instr);
+extern void _Py_Specialize_LoadConst(PyObject *obj, _Py_CODEUNIT *instr);
 
 #ifdef Py_STATS
 

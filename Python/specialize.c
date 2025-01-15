@@ -2994,6 +2994,18 @@ _Py_Specialize_ContainsOp(_PyStackRef value_st, _Py_CODEUNIT *instr)
     return;
 }
 
+void
+_Py_Specialize_LoadConst(PyObject *obj, _Py_CODEUNIT *instr)
+{
+    assert(ENABLE_SPECIALIZATION_FT);
+    uint8_t opcode = FT_ATOMIC_LOAD_UINT8_RELAXED(instr->op.code);
+    if (opcode == LOAD_CONST) {
+        uint8_t spec_opcode =
+            _Py_IsImmortal(obj) ? LOAD_CONST_IMMORTAL : LOAD_CONST_MORTAL;
+        specialize(instr, spec_opcode);
+    }
+}
+
 /* Code init cleanup.
  * CALL_ALLOC_AND_ENTER_INIT will set up
  * the frame to execute the EXIT_INIT_CHECK
