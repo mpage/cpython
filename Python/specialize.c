@@ -3002,7 +3002,7 @@ _Py_Specialize_LoadConst(PyObject *obj, _Py_CODEUNIT *instr)
     if (opcode == LOAD_CONST) {
         uint8_t spec_opcode =
             _Py_IsImmortal(obj) ? LOAD_CONST_IMMORTAL : LOAD_CONST_MORTAL;
-        specialize(instr, spec_opcode);
+        set_opcode(instr, spec_opcode);
     }
 }
 
