@@ -294,10 +294,8 @@ dummy_func(
              * marshalling can intern strings and make them immortal. */
             PyObject *obj = GETITEM(FRAME_CO_CONSTS, oparg);
             value = PyStackRef_FromPyObjectNew(obj);
-#if ENABLE_SPECIALIZATION
-            if (this_instr->op.code == LOAD_CONST) {
-                this_instr->op.code = _Py_IsImmortal(obj) ? LOAD_CONST_IMMORTAL : LOAD_CONST_MORTAL;
-            }
+#if ENABLE_SPECIALIZATION_FT
+            _Py_Specialize_LoadConst(obj, this_instr);
 #endif
         }
 
