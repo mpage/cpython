@@ -786,11 +786,7 @@ _PyEval_EvalFrameDefault(PyThreadState *tstate, _PyInterpreterFrame *frame, int 
 
     _PyInterpreterFrame  entry_frame;
 
-    if (_Py_EnterRecursiveCallTstate(tstate, "")) {
-        assert(frame->owner != FRAME_OWNED_BY_INTERPRETER);
-        _PyEval_FrameClearAndPop(tstate, frame);
-        return NULL;
-    }
+
 
     /* Local "register" variables.
      * These are cached values from the frame and code object.  */
@@ -820,6 +816,11 @@ _PyEval_EvalFrameDefault(PyThreadState *tstate, _PyInterpreterFrame *frame, int 
     tstate->current_frame = frame;
 
     tstate->c_recursion_remaining -= (PY_EVAL_C_STACK_UNITS - 1);
+    if (_Py_EnterRecursiveCallTstate(tstate, "")) {
+        tstate->c_recursion_remaining--;
+        tstate->py_recursion_remaining--;
+        goto exit_unwind;
+    }
 
     /* support for generator.throw() */
     if (throwflag) {
