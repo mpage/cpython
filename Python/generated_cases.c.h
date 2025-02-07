@@ -6895,6 +6895,23 @@
             DISPATCH();
         }
 
+        TARGET(LOAD_FAST_BORROW_LOAD_FAST_BORROW) {
+            frame->instr_ptr = next_instr;
+            next_instr += 1;
+            INSTRUCTION_STATS(LOAD_FAST_BORROW_LOAD_FAST_BORROW);
+            _PyStackRef value1;
+            _PyStackRef value2;
+            uint32_t oparg1 = oparg >> 4;
+            uint32_t oparg2 = oparg & 15;
+            value1 = PyStackRef_DupDeferred(GETLOCAL(oparg1));
+            value2 = PyStackRef_DupDeferred(GETLOCAL(oparg2));
+            stack_pointer[0] = value1;
+            stack_pointer[1] = value2;
+            stack_pointer += 2;
+            assert(WITHIN_STACK_BOUNDS());
+            DISPATCH();
+        }
+
         TARGET(LOAD_FAST_CHECK) {
             frame->instr_ptr = next_instr;
             next_instr += 1;
