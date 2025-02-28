@@ -2524,16 +2524,6 @@ store_local(uint8_t *instr_flags, ref_stack *refs, int local, ref r)
     }
 }
 
-static void
-load_fast_push_block(basicblock ***sp, basicblock *target, int start_depth)
-{
-    assert(target->b_startdepth >= 0 && target->b_startdepth == start_depth);
-    if (!target->b_visited) {
-        target->b_visited = 1;
-        *(*sp)++ = target;
-    }
-}
-
 /*
  * Strength reduce LOAD_FAST{_LOAD_FAST} instructions into weaker variants that
  * load borrowed references onto the operand stack.
@@ -2577,8 +2567,7 @@ optimize_load_fast(cfg_builder *g)
     int status;
     ref_stack refs = {0};
     int max_instrs = 0;
-    basicblock *entryblock = g->g_entryblock;
-    for (basicblock *b = entryblock; b != NULL; b = b->b_next) {
+    for (basicblock *b = g->g_block_list; b != NULL; b = b->b_list) {
         max_instrs = Py_MAX(max_instrs, b->b_iused);
     }
     size_t instr_flags_size = max_instrs * sizeof(uint8_t);
@@ -2587,20 +2576,11 @@ optimize_load_fast(cfg_builder *g)
         PyErr_NoMemory();
         return ERROR;
     }
-    basicblock **blocks = make_cfg_traversal_stack(entryblock);
-    if (blocks == NULL) {
-        status = ERROR;
-        goto done;
-    }
-    basicblock **sp = blocks;
-    *sp = entryblock;
-    sp++;
-    entryblock->b_startdepth = 0;
-    entryblock->b_visited = 1;
 
-    while (sp != blocks) {
-        basicblock *block = *--sp;
-        assert(block->b_startdepth > -1);
+    for (basicblock *block = g->g_block_list; block != NULL; block = block->b_list) {
+        if (block->b_startdepth < 0) {
+            continue;
+        }
 
         // Reset per-block state.
         memset(instr_flags, 0, block->b_iused * sizeof(*instr_flags));
@@ -2694,9 +2674,6 @@ optimize_load_fast(cfg_builder *g)
                 default: {
                     int num_popped = _PyOpcode_num_popped(opcode, oparg);
                     int num_pushed = _PyOpcode_num_pushed(opcode, oparg);
-                    if (HAS_TARGET(instr->i_opcode)) {
-                        load_fast_push_block(&sp, instr->i_target, refs.size - num_popped + num_pushed);
-                    }
                     if (!IS_BLOCK_PUSH_OPCODE(instr->i_opcode)) {
                         // Block push opcodes only affect the stack when jumping
                         // to the target.
@@ -2713,15 +2690,6 @@ optimize_load_fast(cfg_builder *g)
                     break;
                 }
             }
-        }
-
-        // Push fallthrough block
-        cfg_instr *term = basicblock_last_instr(block);
-        if (term != NULL && block->b_next != NULL &&
-            !(IS_UNCONDITIONAL_JUMP_OPCODE(term->i_opcode) ||
-              IS_SCOPE_EXIT_OPCODE(term->i_opcode))) {
-            assert(BB_HAS_FALLTHROUGH(block));
-            load_fast_push_block(&sp, block->b_next, refs.size);
         }
 
         // Mark instructions that produce values that are on the stack at the
@@ -2757,9 +2725,6 @@ done:
     ref_stack_fini(&refs);
     if (instr_flags != NULL) {
         PyMem_Free(instr_flags);
-    }
-    if (blocks != NULL) {
-        PyMem_Free(blocks);
     }
     return status;
 }
