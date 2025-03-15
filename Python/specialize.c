@@ -679,7 +679,7 @@ _PyCode_Quicken(_Py_CODEUNIT *instructions, Py_ssize_t size, int enable_counters
 static inline int
 set_opcode(_Py_CODEUNIT *instr, uint8_t opcode)
 {
-#ifdef Py_GIL_DISABLED
+#if 0
     uint8_t old_op = _Py_atomic_load_uint8_relaxed(&instr->op.code);
     if (old_op >= MIN_INSTRUMENTED_OPCODE) {
         /* Lost race with instrumentation */
@@ -700,8 +700,8 @@ set_opcode(_Py_CODEUNIT *instr, uint8_t opcode)
 static inline void
 set_counter(_Py_BackoffCounter *counter, _Py_BackoffCounter value)
 {
-    FT_ATOMIC_STORE_UINT16_RELAXED(counter->value_and_backoff,
-                                   value.value_and_backoff);
+    counter->value_and_backoff = value.value_and_backoff;
+
 }
 
 static inline _Py_BackoffCounter
@@ -709,7 +709,7 @@ load_counter(_Py_BackoffCounter *counter)
 {
     _Py_BackoffCounter result = {
         .value_and_backoff =
-            FT_ATOMIC_LOAD_UINT16_RELAXED(counter->value_and_backoff)};
+        (counter->value_and_backoff)};
     return result;
 }
 
