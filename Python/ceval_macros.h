@@ -281,8 +281,8 @@ GETITEM(PyObject *v, Py_ssize_t i) {
 // avoid any potentially escaping calls (like PyStackRef_CLOSE) while the
 // object is locked.
 #ifdef Py_GIL_DISABLED
-#  define LOCK_OBJECT(op) PyMutex_LockFast(&(_PyObject_CAST(op))->ob_mutex)
-#  define UNLOCK_OBJECT(op) PyMutex_Unlock(&(_PyObject_CAST(op))->ob_mutex)
+#  define LOCK_OBJECT(op) (1)
+#  define UNLOCK_OBJECT(op) ((void)0)
 #else
 #  define LOCK_OBJECT(op) (1)
 #  define UNLOCK_OBJECT(op) ((void)0)
