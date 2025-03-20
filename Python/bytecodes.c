@@ -879,18 +879,11 @@ dummy_func(
             // Deopt unless 0 <= sub < PyList_Size(list)
             DEOPT_IF(!_PyLong_IsNonNegativeCompact((PyLongObject *)sub));
             Py_ssize_t index = ((PyLongObject*)sub)->long_value.ob_digit[0];
-#ifdef Py_GIL_DISABLED
-            PyObject *res_o = _PyList_GetItemRef((PyListObject*)list, index);
-            DEOPT_IF(res_o == NULL);
-            STAT_INC(BINARY_OP, hit);
-            res = PyStackRef_FromPyObjectSteal(res_o);
-#else
             DEOPT_IF(index >= PyList_GET_SIZE(list));
             STAT_INC(BINARY_OP, hit);
             PyObject *res_o = PyList_GET_ITEM(list, index);
             assert(res_o != NULL);
             res = PyStackRef_FromPyObjectNew(res_o);
-#endif
             STAT_INC(BINARY_OP, hit);
             DECREF_INPUTS();
         }
