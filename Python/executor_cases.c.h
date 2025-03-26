@@ -3143,7 +3143,7 @@
                 UOP_STAT_INC(uopcode, miss);
                 JUMP_TO_JUMP_TARGET();
             }
-            #ifdef Py_GIL_DISABLED
+            #ifdef Py_GIL_DISABLED && 0
             if (!_Py_TryIncrefCompareStackRef(value_ptr, attr_o, &attr)) {
                 if (true) {
                     UOP_STAT_INC(uopcode, miss);

@@ -2237,7 +2237,7 @@ dummy_func(
             PyObject **value_ptr = (PyObject**)(((char *)owner_o) + offset);
             PyObject *attr_o = FT_ATOMIC_LOAD_PTR_ACQUIRE(*value_ptr);
             DEOPT_IF(attr_o == NULL);
-            #ifdef Py_GIL_DISABLED
+            #ifdef Py_GIL_DISABLED && 0
             if (!_Py_TryIncrefCompareStackRef(value_ptr, attr_o, &attr)) {
                 DEOPT_IF(true);
             }

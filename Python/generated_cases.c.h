@@ -8063,7 +8063,7 @@
                     assert(_PyOpcode_Deopt[opcode] == (LOAD_ATTR));
                     JUMP_TO_PREDICTED(LOAD_ATTR);
                 }
-                #ifdef Py_GIL_DISABLED
+                #ifdef Py_GIL_DISABLED && 0
                 if (!_Py_TryIncrefCompareStackRef(value_ptr, attr_o, &attr)) {
                     if (true) {
                         UPDATE_MISS_STATS(LOAD_ATTR);
