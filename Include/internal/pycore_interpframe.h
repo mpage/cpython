@@ -171,9 +171,7 @@ _PyFrame_GetStackPointer(_PyInterpreterFrame *frame)
 {
     assert(frame->stackpointer != NULL);
     _PyStackRef *sp = frame->stackpointer;
-#ifndef NDEBUG
     frame->stackpointer = NULL;
-#endif
     return sp;
 }
 
