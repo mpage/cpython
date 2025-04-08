@@ -948,7 +948,7 @@ _PyObjectArray_Free(PyObject **array, PyObject **scratch)
 #include "generated_cases.c.h"
 #endif
 
-PyObject* _Py_HOT_FUNCTION __attribute__((optimize ("no-tree-vectorize")))
+PyObject* _Py_HOT_FUNCTION __attribute__((optimize ("no-tree-slp-vectorize")))
 _PyEval_EvalFrameDefault(PyThreadState *tstate, _PyInterpreterFrame *frame, int throwflag)
 {
     _Py_EnsureTstateNotNULL(tstate);
