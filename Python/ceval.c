@@ -948,11 +948,13 @@ _PyObjectArray_Free(PyObject **array, PyObject **scratch)
 #include "generated_cases.c.h"
 #endif
 
-#if (defined(__GNUC__) && !defined(__clang__)) && defined(__x86_64__)
+#if (defined(__GNUC__) && !defined(__clang__)) && defined(__x86_64__) && (__GNUC__ >= 10)
 /*
- * gh-129987: The SLP autovectorizer can cause poor code generation for opcode
- * dispatch, negating any benefit we get from vectorization elsewhere in the
- * interpreter loop.
+ * gh-129987: The SLP autovectorizer in GCC can cause poor code generation for
+ * opcode dispatch in GCC 12 onwards, negating any benefit we get from
+ * vectorization elsewhere in the interpreter loop. Disabling autovectorization
+ * doesn't affect performance in versions 10 and 11, but it regresses
+ * performance in earlier versions of GCC.
  */
 #define DONT_SLP_VECTORIZE __attribute__((optimize ("no-tree-slp-vectorize")))
 #else
