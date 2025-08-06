@@ -1960,12 +1960,12 @@ _PyEval_Vector(PyThreadState *tstate, PyFunctionObject *func,
      * to func, locals and all its arguments */
     Py_XINCREF(locals);
     for (size_t i = 0; i < argcount; i++) {
-        arguments[i] = PyStackRef_FromPyObjectNew(args[i]);
+        arguments[i] = PyStackRef_FromPyObjectBorrow(args[i]);
     }
     if (kwnames) {
         Py_ssize_t kwcount = PyTuple_GET_SIZE(kwnames);
         for (Py_ssize_t i = 0; i < kwcount; i++) {
-            arguments[i+argcount] = PyStackRef_FromPyObjectNew(args[i+argcount]);
+            arguments[i+argcount] = PyStackRef_FromPyObjectBorrow(args[i+argcount]);
         }
     }
     _PyInterpreterFrame *frame = _PyEvalFramePushAndInit(
