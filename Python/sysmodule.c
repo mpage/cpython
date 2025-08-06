@@ -2023,6 +2023,30 @@ sys_getrefcount_impl(PyObject *module, PyObject *object)
     return Py_REFCNT(object);
 }
 
+/*[clinic input]
+sys._is_unique_referenced_temporary -> bool
+
+    object:  object
+    frame: object
+    /
+
+Return whether or not the object is a unique temporary on frame's operand stack.
+
+[clinic start generated code]*/
+
+static int
+sys__is_unique_referenced_temporary_impl(PyObject *module, PyObject *object,
+                                         PyObject *frame)
+/*[clinic end generated code: output=733c07d5fd656432 input=eb75fdfbc2d2f56c]*/
+{
+    if (!PyFrame_Check(frame)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "frame must be a frame object");
+        return -1;
+    }
+    return _PyObject_IsUniqueReferencedTemporary(object, ((PyFrameObject*)frame)->f_frame);
+}
+
 #ifdef Py_REF_DEBUG
 /*[clinic input]
 sys.gettotalrefcount -> Py_ssize_t
@@ -2791,6 +2815,7 @@ static PyMethodDef sys_methods[] = {
 #endif
     SYS_GETTOTALREFCOUNT_METHODDEF
     SYS_GETREFCOUNT_METHODDEF
+    SYS__IS_UNIQUE_REFERENCED_TEMPORARY_METHODDEF
     SYS_GETRECURSIONLIMIT_METHODDEF
     {"getsizeof", _PyCFunction_CAST(sys_getsizeof),
      METH_VARARGS | METH_KEYWORDS, getsizeof_doc},

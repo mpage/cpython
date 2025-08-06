@@ -989,6 +989,8 @@ extern int _PyObject_IsAbstract(PyObject *);
 PyAPI_FUNC(int) _PyObject_GetMethod(PyObject *obj, PyObject *name, PyObject **method);
 extern PyObject* _PyObject_NextNotImplemented(PyObject *);
 
+extern int _PyObject_IsUniqueReferencedTemporary(PyObject *op, _PyInterpreterFrame *frame);
+
 // Pickle support.
 // Export for '_datetime' shared extension
 PyAPI_FUNC(PyObject*) _PyObject_GetState(PyObject *);

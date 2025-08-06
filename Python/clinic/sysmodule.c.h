@@ -996,6 +996,42 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(sys__is_unique_referenced_temporary__doc__,
+"_is_unique_referenced_temporary($module, object, frame, /)\n"
+"--\n"
+"\n"
+"Return whether or not the object is a unique temporary on frame\'s operand stack.");
+
+#define SYS__IS_UNIQUE_REFERENCED_TEMPORARY_METHODDEF    \
+    {"_is_unique_referenced_temporary", _PyCFunction_CAST(sys__is_unique_referenced_temporary), METH_FASTCALL, sys__is_unique_referenced_temporary__doc__},
+
+static int
+sys__is_unique_referenced_temporary_impl(PyObject *module, PyObject *object,
+                                         PyObject *frame);
+
+static PyObject *
+sys__is_unique_referenced_temporary(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *object;
+    PyObject *frame;
+    int _return_value;
+
+    if (!_PyArg_CheckPositional("_is_unique_referenced_temporary", nargs, 2, 2)) {
+        goto exit;
+    }
+    object = args[0];
+    frame = args[1];
+    _return_value = sys__is_unique_referenced_temporary_impl(module, object, frame);
+    if ((_return_value == -1) && PyErr_Occurred()) {
+        goto exit;
+    }
+    return_value = PyBool_FromLong((long)_return_value);
+
+exit:
+    return return_value;
+}
+
 #if defined(Py_REF_DEBUG)
 
 PyDoc_STRVAR(sys_gettotalrefcount__doc__,
@@ -1948,4 +1984,4 @@ exit:
 #ifndef SYS_GETANDROIDAPILEVEL_METHODDEF
     #define SYS_GETANDROIDAPILEVEL_METHODDEF
 #endif /* !defined(SYS_GETANDROIDAPILEVEL_METHODDEF) */
-/*[clinic end generated code: output=449d16326e69dcf6 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=0ad4f50205026969 input=a9049054013a1b77]*/

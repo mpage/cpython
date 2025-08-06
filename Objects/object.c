@@ -2745,17 +2745,11 @@ PyUnstable_Object_EnableDeferredRefcount(PyObject *op)
 }
 
 int
-PyUnstable_Object_IsUniqueReferencedTemporary(PyObject *op)
+_PyObject_IsUniqueReferencedTemporary(PyObject *op, _PyInterpreterFrame *frame)
 {
     if (!_PyObject_IsUniquelyReferenced(op)) {
         return 0;
     }
-
-    _PyInterpreterFrame *frame = _PyEval_GetFrame();
-    if (frame == NULL) {
-        return 0;
-    }
-
     _PyStackRef *base = _PyFrame_Stackbase(frame);
     _PyStackRef *stackpointer = frame->stackpointer;
     while (stackpointer > base) {
@@ -2765,6 +2759,16 @@ PyUnstable_Object_IsUniqueReferencedTemporary(PyObject *op)
         }
     }
     return 0;
+}
+
+int
+PyUnstable_Object_IsUniqueReferencedTemporary(PyObject *op)
+{
+    _PyInterpreterFrame *frame = _PyEval_GetFrame();
+    if (frame == NULL) {
+        return 0;
+    }
+    return _PyObject_IsUniqueReferencedTemporary(op, frame);
 }
 
 int
