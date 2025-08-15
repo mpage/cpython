@@ -996,6 +996,34 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(sys__is_local_in_caller_frame__doc__,
+"_is_local_in_caller_frame($module, object, /)\n"
+"--\n"
+"\n"
+"Return whether or not the object is a local in the caller\'s frame.");
+
+#define SYS__IS_LOCAL_IN_CALLER_FRAME_METHODDEF    \
+    {"_is_local_in_caller_frame", (PyCFunction)sys__is_local_in_caller_frame, METH_O, sys__is_local_in_caller_frame__doc__},
+
+static int
+sys__is_local_in_caller_frame_impl(PyObject *module, PyObject *object);
+
+static PyObject *
+sys__is_local_in_caller_frame(PyObject *module, PyObject *object)
+{
+    PyObject *return_value = NULL;
+    int _return_value;
+
+    _return_value = sys__is_local_in_caller_frame_impl(module, object);
+    if ((_return_value == -1) && PyErr_Occurred()) {
+        goto exit;
+    }
+    return_value = PyBool_FromLong((long)_return_value);
+
+exit:
+    return return_value;
+}
+
 #if defined(Py_REF_DEBUG)
 
 PyDoc_STRVAR(sys_gettotalrefcount__doc__,
@@ -1979,4 +2007,4 @@ exit:
 #ifndef SYS_GETANDROIDAPILEVEL_METHODDEF
     #define SYS_GETANDROIDAPILEVEL_METHODDEF
 #endif /* !defined(SYS_GETANDROIDAPILEVEL_METHODDEF) */
-/*[clinic end generated code: output=9052f399f40ca32d input=a9049054013a1b77]*/
+/*[clinic end generated code: output=8bacd07f6014dc16 input=a9049054013a1b77]*/

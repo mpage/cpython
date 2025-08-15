@@ -2022,6 +2022,43 @@ sys_getrefcount_impl(PyObject *module, PyObject *object)
     return Py_REFCNT(object);
 }
 
+/*[clinic input]
+sys._is_local_in_caller_frame -> bool
+
+    object:  object
+    /
+
+Return whether or not the object is a local in the caller's frame.
+
+[clinic start generated code]*/
+
+static int
+sys__is_local_in_caller_frame_impl(PyObject *module, PyObject *object)
+/*[clinic end generated code: output=69104a215c0121cc input=dc419d1372ba7212]*/
+{
+    _PyInterpreterFrame *frame = _PyEval_GetFrame();
+    if (frame == NULL) {
+        return 0;
+    }
+    // Skip over entry frames
+    _PyInterpreterFrame *prev = _PyFrame_GetFirstComplete(frame->previous);
+    if (prev == NULL) {
+        return 0;
+    }
+    PyObject *exec = PyStackRef_AsPyObjectBorrow(prev->f_executable);
+    if (!PyCode_Check(exec)) {
+        return 0;
+    }
+    int nlocals = ((PyCodeObject *) exec)->co_nlocals;
+    _PyStackRef *localsplus = _PyFrame_GetLocalsArray(prev);
+    for (int i = 0; i < nlocals; i++) {
+        if (object == PyStackRef_AsPyObjectBorrow(localsplus[i])) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 #ifdef Py_REF_DEBUG
 /*[clinic input]
 sys.gettotalrefcount -> Py_ssize_t
@@ -2831,6 +2868,7 @@ static PyMethodDef sys_methods[] = {
 #endif
     SYS_GETTOTALREFCOUNT_METHODDEF
     SYS_GETREFCOUNT_METHODDEF
+    SYS__IS_LOCAL_IN_CALLER_FRAME_METHODDEF
     SYS_GETRECURSIONLIMIT_METHODDEF
     {"getsizeof", _PyCFunction_CAST(sys_getsizeof),
      METH_VARARGS | METH_KEYWORDS, getsizeof_doc},
