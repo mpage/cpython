@@ -12,6 +12,14 @@
 #ifndef _Py_PYABI_H
 #define _Py_PYABI_H
 
+/* EXPERIMENT: unconditionally enable Py_FT_NOSYNC in free-threaded builds.
+ * See Include/internal/pycore_critical_section.h. Only safe for
+ * single-threaded programs.
+ */
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
+#  define Py_FT_NOSYNC 1
+#endif
+
 /* Defines to build Python and its standard library:
  *
  * - Py_BUILD_CORE: Build Python core. Gives access to Python internals; should

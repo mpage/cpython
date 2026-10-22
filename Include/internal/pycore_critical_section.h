@@ -22,9 +22,9 @@ extern "C" {
 
 // EXPERIMENT: Py_FT_NOSYNC
 //
-// Defining Py_FT_NOSYNC (e.g. `./configure --disable-gil
-// CPPFLAGS=-DPy_FT_NOSYNC`) in a free-threaded build replaces critical
-// sections, LOCK_OBJECT()/UNLOCK_OBJECT(), FT_MUTEX_*() and the FT_ATOMIC_*()
+// Py_FT_NOSYNC is defined unconditionally in free-threaded builds (see
+// Include/pyabi.h).  It replaces critical sections,
+// LOCK_OBJECT()/UNLOCK_OBJECT(), FT_MUTEX_*() and the FT_ATOMIC_*()
 // wrappers with their default (GIL) build definitions, i.e. no-ops and plain
 // loads/stores.  The object layout and everything else about the
 // free-threaded build (biased reference counting, mimalloc, QSBR, the
