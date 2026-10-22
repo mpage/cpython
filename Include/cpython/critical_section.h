@@ -41,7 +41,7 @@ PyCriticalSection_BeginMutex(PyCriticalSection *c, PyMutex *m);
 PyAPI_FUNC(void)
 PyCriticalSection2_BeginMutex(PyCriticalSection2 *c, PyMutex *m1, PyMutex *m2);
 
-#ifndef Py_GIL_DISABLED
+#if !defined(Py_GIL_DISABLED) || defined(Py_FT_NOSYNC)
 #undef Py_BEGIN_CRITICAL_SECTION
 #undef Py_END_CRITICAL_SECTION
 #undef Py_BEGIN_CRITICAL_SECTION2

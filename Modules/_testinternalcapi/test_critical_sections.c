@@ -11,7 +11,7 @@
 #  include <windows.h>            // Sleep()
 #endif
 
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
 #define assert_nogil assert
 #define assert_gil(x)
 #else
@@ -286,7 +286,7 @@ test_critical_sections_gc(PyObject *self, PyObject *Py_UNUSED(args))
 
 #endif
 
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
 
 static PyObject *
 test_critical_section1_reacquisition(PyObject *self, PyObject *Py_UNUSED(args))
@@ -468,7 +468,7 @@ static PyMethodDef test_methods[] = {
     {"test_critical_sections", test_critical_sections, METH_NOARGS},
     {"test_critical_sections_nest", test_critical_sections_nest, METH_NOARGS},
     {"test_critical_sections_suspend", test_critical_sections_suspend, METH_NOARGS},
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
     {"test_critical_section1_reacquisition", test_critical_section1_reacquisition, METH_NOARGS},
     {"test_critical_section2_reacquisition", test_critical_section2_reacquisition, METH_NOARGS},
 #endif

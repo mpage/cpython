@@ -20,7 +20,21 @@ extern "C" {
 #define _Py_CRITICAL_SECTION_TWO_MUTEXES    0x2
 #define _Py_CRITICAL_SECTION_MASK           0x3
 
-#ifdef Py_GIL_DISABLED
+// EXPERIMENT: Py_FT_NOSYNC
+//
+// Defining Py_FT_NOSYNC (e.g. `./configure --disable-gil
+// CPPFLAGS=-DPy_FT_NOSYNC`) in a free-threaded build replaces critical
+// sections, LOCK_OBJECT()/UNLOCK_OBJECT(), FT_MUTEX_*() and the FT_ATOMIC_*()
+// wrappers with their default (GIL) build definitions, i.e. no-ops and plain
+// loads/stores.  The object layout and everything else about the
+// free-threaded build (biased reference counting, mimalloc, QSBR, the
+// free-threaded GC, specialization, etc.) are unchanged.
+//
+// This is ONLY safe for single-threaded programs.  It exists to measure an
+// upper bound on how much single-threaded performance could be recovered by
+// executing without synchronization until a second thread is created.
+// Creating a second thread state is refused (see new_threadstate()).
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
 // Specialized version of critical section locking to safely use
 // PySequence_Fast APIs without the GIL. For performance, the argument *to*
 // PySequence_Fast() is provided to the macro, not the *result* of
@@ -72,7 +86,7 @@ extern "C" {
 
 #endif  /* Py_DEBUG */
 
-#else  /* !Py_GIL_DISABLED */
+#else  /* !Py_GIL_DISABLED || Py_FT_NOSYNC */
 // The critical section APIs are no-ops with the GIL.
 # define Py_BEGIN_CRITICAL_SECTION_SEQUENCE_FAST(original) {
 # define Py_END_CRITICAL_SECTION_SEQUENCE_FAST() }
@@ -95,7 +109,7 @@ _PyCriticalSection2_BeginSlow(PyThreadState *tstate, PyCriticalSection2 *c, PyMu
 PyAPI_FUNC(void)
 _PyCriticalSection_SuspendAll(PyThreadState *tstate);
 
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
 
 static inline int
 _PyCriticalSection_IsActive(uintptr_t tag)
@@ -289,7 +303,7 @@ _PyCriticalSection_AssertHeldObj(PyObject *op)
         _PyCriticalSection2_End(_cs_tstate, &_py_cs2);                  \
     }
 
-#endif /* Py_GIL_DISABLED */
+#endif /* Py_GIL_DISABLED && !Py_FT_NOSYNC */
 
 #ifdef __cplusplus
 }

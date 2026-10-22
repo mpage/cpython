@@ -4,12 +4,12 @@
 #include "pycore_interp.h"
 #include "pycore_lock.h"
 
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
 static_assert(_Alignof(PyCriticalSection) >= 4,
               "critical section must be aligned to at least 4 bytes");
 #endif
 
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
 static PyCriticalSection *
 untag_critical_section(uintptr_t tag)
 {
@@ -20,7 +20,7 @@ untag_critical_section(uintptr_t tag)
 void
 _PyCriticalSection_BeginSlow(PyThreadState *tstate, PyCriticalSection *c, PyMutex *m)
 {
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
     // As an optimisation for locking the same object recursively, skip
     // locking if the mutex is currently locked by the top-most critical
     // section.
@@ -65,7 +65,7 @@ void
 _PyCriticalSection2_BeginSlow(PyThreadState *tstate, PyCriticalSection2 *c, PyMutex *m1, PyMutex *m2,
                               int is_m1_locked)
 {
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
     if (tstate->interp->stoptheworld.world_stopped) {
         c->_cs_base._cs_mutex = NULL;
         c->_cs_mutex2 = NULL;
@@ -108,7 +108,7 @@ _PyCriticalSection2_BeginSlow(PyThreadState *tstate, PyCriticalSection2 *c, PyMu
 void
 _PyCriticalSection_SuspendAll(PyThreadState *tstate)
 {
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
     uintptr_t *tagptr = &tstate->critical_section;
     while (_PyCriticalSection_IsActive(*tagptr)) {
         PyCriticalSection *c = untag_critical_section(*tagptr);
@@ -132,7 +132,7 @@ _PyCriticalSection_SuspendAll(PyThreadState *tstate)
 void
 _PyCriticalSection_Resume(PyThreadState *tstate)
 {
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
     uintptr_t p = tstate->critical_section;
     PyCriticalSection *c = untag_critical_section(p);
     assert(!_PyCriticalSection_IsActive(p));
@@ -168,7 +168,7 @@ _PyCriticalSection_Resume(PyThreadState *tstate)
 void
 PyCriticalSection_Begin(PyCriticalSection *c, PyObject *op)
 {
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
     _PyCriticalSection_Begin(_PyThreadState_GET(), c, op);
 #endif
 }
@@ -177,7 +177,7 @@ PyCriticalSection_Begin(PyCriticalSection *c, PyObject *op)
 void
 PyCriticalSection_BeginMutex(PyCriticalSection *c, PyMutex *m)
 {
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
     _PyCriticalSection_BeginMutex(_PyThreadState_GET(), c, m);
 #endif
 }
@@ -186,7 +186,7 @@ PyCriticalSection_BeginMutex(PyCriticalSection *c, PyMutex *m)
 void
 PyCriticalSection_End(PyCriticalSection *c)
 {
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
     _PyCriticalSection_End(_PyThreadState_GET(), c);
 #endif
 }
@@ -195,7 +195,7 @@ PyCriticalSection_End(PyCriticalSection *c)
 void
 PyCriticalSection2_Begin(PyCriticalSection2 *c, PyObject *a, PyObject *b)
 {
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
     _PyCriticalSection2_Begin(_PyThreadState_GET(), c, a, b);
 #endif
 }
@@ -204,7 +204,7 @@ PyCriticalSection2_Begin(PyCriticalSection2 *c, PyObject *a, PyObject *b)
 void
 PyCriticalSection2_BeginMutex(PyCriticalSection2 *c, PyMutex *m1, PyMutex *m2)
 {
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
     _PyCriticalSection2_BeginMutex(_PyThreadState_GET(), c, m1, m2);
 #endif
 }
@@ -213,7 +213,7 @@ PyCriticalSection2_BeginMutex(PyCriticalSection2 *c, PyMutex *m1, PyMutex *m2)
 void
 PyCriticalSection2_End(PyCriticalSection2 *c)
 {
-#ifdef Py_GIL_DISABLED
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
     _PyCriticalSection2_End(_PyThreadState_GET(), c);
 #endif
 }

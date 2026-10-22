@@ -19,7 +19,10 @@ extern "C" {
 #error "this header requires Py_BUILD_CORE define"
 #endif
 
-#ifdef Py_GIL_DISABLED
+// EXPERIMENT: Py_FT_NOSYNC builds use the default-build (non-atomic)
+// definitions below even when Py_GIL_DISABLED is defined. See
+// Include/internal/pycore_critical_section.h.
+#if defined(Py_GIL_DISABLED) && !defined(Py_FT_NOSYNC)
 #define FT_ATOMIC_LOAD_PTR(value) _Py_atomic_load_ptr(&value)
 #define FT_ATOMIC_STORE_PTR(value, new_value) _Py_atomic_store_ptr(&value, new_value)
 #define FT_ATOMIC_LOAD_SSIZE(value) _Py_atomic_load_ssize(&value)
@@ -204,9 +207,17 @@ extern "C" {
 #define FT_ATOMIC_LOAD_ULLONG_RELAXED(value) value
 #define FT_ATOMIC_STORE_ULLONG_RELAXED(value, new_value) value = new_value
 #define FT_ATOMIC_ADD_SSIZE(value, new_value) (void)(value += new_value)
+#ifdef Py_GIL_DISABLED
+// Py_FT_NOSYNC: the lock expression is valid, so use it to avoid
+// unused-variable warnings.
+#define FT_MUTEX_LOCK(lock) ((void)(lock))
+#define FT_MUTEX_LOCK_FLAGS(lock, flags) ((void)(lock))
+#define FT_MUTEX_UNLOCK(lock) ((void)(lock))
+#else
 #define FT_MUTEX_LOCK(lock) do {} while (0)
 #define FT_MUTEX_LOCK_FLAGS(lock, flags) do {} while (0)
 #define FT_MUTEX_UNLOCK(lock) do {} while (0)
+#endif
 
 #endif
 

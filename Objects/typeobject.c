@@ -150,6 +150,12 @@ types_start_world(void)
 static void
 type_lock_prevent_release(pinned_mutexes_t *pinned)
 {
+#ifdef Py_FT_NOSYNC
+    // Critical sections are no-ops: there is nothing to pin.
+    pinned->mutex1 = NULL;
+    pinned->mutex2 = NULL;
+    return;
+#endif
     PyThreadState *tstate = _PyThreadState_GET();
     uintptr_t tag = tstate->critical_section;
     PyCriticalSection *c = (PyCriticalSection *)(tag & ~_Py_CRITICAL_SECTION_MASK);
@@ -167,6 +173,10 @@ type_lock_prevent_release(pinned_mutexes_t *pinned)
 static void
 type_lock_allow_release(pinned_mutexes_t *pinned)
 {
+#ifdef Py_FT_NOSYNC
+    (void)pinned;
+    return;
+#endif
     PyThreadState *tstate = _PyThreadState_GET();
     uintptr_t tag = tstate->critical_section;
     PyCriticalSection *c = (PyCriticalSection *)(tag & ~_Py_CRITICAL_SECTION_MASK);

@@ -1679,6 +1679,18 @@ add_threadstate(PyInterpreterState *interp, PyThreadState *tstate,
 static PyThreadState *
 new_threadstate(PyInterpreterState *interp, int whence)
 {
+#ifdef Py_FT_NOSYNC
+    // EXPERIMENT: Py_FT_NOSYNC builds perform no synchronization and are only
+    // safe with a single thread state.  See pycore_critical_section.h.
+    if (interp->threads.head != NULL || !_Py_IsMainInterpreter(interp)) {
+        if (_PyThreadState_GET() != NULL) {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "Py_FT_NOSYNC build: only a single thread is "
+                            "supported");
+        }
+        return NULL;
+    }
+#endif
     // Allocate the thread state.
     _PyThreadStateImpl *tstate = alloc_threadstate(interp);
     if (tstate == NULL) {
